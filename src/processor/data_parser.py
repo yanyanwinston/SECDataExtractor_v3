@@ -42,8 +42,12 @@ class DataParser:
         Returns:
             Processing result with parsed statements
         """
+        company_name = "Unknown Company"
+        filing_date = "Unknown Date"
+        form_type = "Unknown Form"
+
         try:
-            # Extract basic metadata
+            # Extract basic metadata (best effort)
             company_name = self._extract_company_name(viewer_data)
             filing_date = self._extract_filing_date(viewer_data)
             form_type = self._extract_form_type(viewer_data)
@@ -52,6 +56,12 @@ class DataParser:
             if self.use_presentation_parsing:
                 statements = self._parse_with_presentation(viewer_data)
             else:
+                statements = self._parse_statements(viewer_data)
+
+            if not statements and self.use_presentation_parsing:
+                logger.warning(
+                    "Presentation parsing yielded no statements; falling back to legacy pipeline"
+                )
                 statements = self._parse_statements(viewer_data)
 
             return ProcessingResult(
@@ -66,9 +76,9 @@ class DataParser:
             logger.error(f"Error parsing viewer data: {e}")
             return ProcessingResult(
                 statements=[],
-                company_name="",
-                filing_date="",
-                form_type="",
+                company_name=company_name,
+                filing_date=filing_date,
+                form_type=form_type,
                 success=False,
                 error=str(e)
             )
@@ -157,7 +167,7 @@ class DataParser:
             )
 
             if not presentation_statements:
-                logger.warning("No presentation statements found, falling back to legacy parsing")
+                logger.warning("No presentation statements found; falling back to legacy parsing")
                 return self._parse_statements(viewer_data)
 
             # Extract periods and facts
@@ -165,12 +175,12 @@ class DataParser:
             facts = self._extract_facts_from_viewer_data(viewer_data)
 
             if not periods:
-                logger.warning("No periods found in viewer data")
-                return []
+                logger.warning("No periods found in viewer data; falling back to legacy parsing")
+                return self._parse_statements(viewer_data)
 
             if not facts:
-                logger.warning("No facts found in viewer data")
-                return []
+                logger.warning("No facts found in viewer data; falling back to legacy parsing")
+                return self._parse_statements(viewer_data)
 
             # Match facts to presentation for each statement
             statement_tables = []
@@ -185,6 +195,10 @@ class DataParser:
                     except Exception as e:
                         logger.warning(f"Failed to match facts for {pres_statement.statement_name}: {e}")
                         continue
+
+            if not statement_tables:
+                logger.warning("No primary statements produced; falling back to legacy parsing")
+                return self._parse_statements(viewer_data)
 
             # Convert to existing Statement format for compatibility with Excel generator
             statements = self._convert_statement_tables_to_legacy_format(statement_tables)
@@ -268,33 +282,36 @@ class DataParser:
             return {}
 
     def _convert_statement_tables_to_legacy_format(self, tables: List) -> List[Statement]:
-        """Convert StatementTable objects to legacy Statement format.
+        """Convert StatementTable objects to legacy Statement format."""
 
-        Args:
-            tables: List of StatementTable objects
-
-        Returns:
-            List of legacy Statement objects
-        """
-        statements = []
+        legacy_statements: List[Statement] = []
 
         for table in tables:
-            # Use the conversion method from StatementTable
-            legacy_statement = table.to_legacy_statement()
+            legacy_rows: List[Row] = []
 
-            # Add presentation node references for Excel generator enhancement
-            for row in legacy_statement.rows:
-                # Find corresponding StatementRow to get presentation node
-                for stmt_row in table.rows:
-                    if (stmt_row.node.concept == row.concept and
-                        stmt_row.node.label == row.label):
-                        # Add reference to presentation node for Excel generator
-                        row.presentation_node = stmt_row.node
-                        break
+            for stmt_row in table.rows:
+                legacy_row = Row(
+                    label=stmt_row.node.label,
+                    concept=stmt_row.node.concept,
+                    is_abstract=stmt_row.node.abstract,
+                    depth=stmt_row.node.depth,
+                    cells=dict(stmt_row.cells)
+                )
 
-            statements.append(legacy_statement)
+                # Preserve presentation metadata for Excel generator enhancements
+                legacy_row.presentation_node = stmt_row.node
+                legacy_rows.append(legacy_row)
 
-        return statements
+            legacy_statements.append(
+                Statement(
+                    name=table.statement.statement_name,
+                    short_name=table.statement.get_short_name(),
+                    periods=table.periods,
+                    rows=legacy_rows
+                )
+            )
+
+        return legacy_statements
 
     def _parse_statements(self, data: Dict[str, Any]) -> List[Statement]:
         """Parse financial statements from viewer data."""

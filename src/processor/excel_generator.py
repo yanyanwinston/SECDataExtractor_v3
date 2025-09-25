@@ -147,8 +147,30 @@ class ExcelGenerator:
         row_num = 3  # Start after headers
 
         for row in statement.rows:
-            # Column A: Item label
-            ws[f'A{row_num}'] = row.label
+            presentation_node = getattr(row, 'presentation_node', None)
+
+            # Column A: Item label with indentation and styling
+            label_cell = ws.cell(row=row_num, column=1)
+            label_cell.value = row.label
+
+            if presentation_node:
+                indent_level = max(0, min(15, presentation_node.depth))
+                label_cell.alignment = Alignment(indent=indent_level)
+
+                if presentation_node.abstract:
+                    label_cell.font = Font(bold=True)
+                elif presentation_node.preferred_label_role:
+                    role = presentation_node.preferred_label_role.lower()
+                    if 'total' in role or 'subtotal' in role:
+                        label_cell.font = Font(bold=True)
+                        label_cell.border = Border(top=Side(style='thin'))
+            else:
+                # Legacy fallback using existing heuristics
+                depth = getattr(row, 'depth', 0)
+                if depth:
+                    label_cell.alignment = Alignment(indent=max(0, min(15, depth)))
+                if getattr(row, 'is_abstract', False):
+                    label_cell.font = Font(bold=True)
 
             # Data columns
             for i, period in enumerate(periods, start=2):
@@ -158,18 +180,34 @@ class ExcelGenerator:
                 period_key = getattr(period, 'label', '') or getattr(period, 'end_date', '')
                 cell_data = row.cells.get(period_key)
 
+                cell = ws.cell(row=row_num, column=i)
+
                 if cell_data and cell_data.value is not None:
                     try:
-                        # Try to convert to number for Excel
                         if cell_data.raw_value is not None:
-                            ws[f'{col_letter}{row_num}'] = float(cell_data.raw_value)
+                            cell.value = float(cell_data.raw_value)
                         else:
-                            ws[f'{col_letter}{row_num}'] = cell_data.value
+                            cell.value = cell_data.value
                     except (ValueError, TypeError):
-                        # Use formatted string value
-                        ws[f'{col_letter}{row_num}'] = cell_data.value
+                        cell.value = cell_data.value
+
+                    # Apply numeric formatting based on unit hints
+                    if cell_data.raw_value is not None:
+                        unit = (cell_data.unit or '').lower()
+                        if 'usd' in unit:
+                            cell.number_format = '#,##0.0_);(#,##0.0)'
+                        elif 'shares' in unit:
+                            cell.number_format = '#,##0'
+                        elif unit in {'percent', '%'}:
+                            cell.number_format = '0.00%'
                 else:
-                    ws[f'{col_letter}{row_num}'] = "—"
+                    cell.value = "—"
+
+                # Highlight totals/subtotals using preferred label metadata
+                if presentation_node and presentation_node.preferred_label_role:
+                    role = presentation_node.preferred_label_role.lower()
+                    if 'total' in role or 'subtotal' in role:
+                        cell.border = Border(top=Side(style='thin'))
 
             row_num += 1
 
@@ -200,13 +238,17 @@ class ExcelGenerator:
         for row in range(3, max_row + 1):
             # Label column (A)
             label_cell = ws.cell(row=row, column=1)
-            label_cell.font = normal_font
 
-            # Check if this is an abstract/header row (simple heuristic)
+            # Preserve explicit styling applied during row write; otherwise fall back
+            if not label_cell.font or not label_cell.font.bold:
+                label_cell.font = normal_font
+
             label_text = str(label_cell.value or "")
-            if self._is_abstract_row(label_text):
+            if label_text and (label_cell.font and label_cell.font.bold):
+                # Ensure bold rows maintain a separator if not already applied
+                pass
+            elif self._is_abstract_row(label_text):
                 label_cell.font = abstract_font
-                # Add border under abstract rows
                 for col in range(1, num_periods + 2):
                     ws.cell(row=row, column=col).border = thin_border
 
