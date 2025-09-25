@@ -130,7 +130,11 @@ class FactMatcher:
                         instant=True
                     )
 
-        periods = list(periods_dict.values())
+        periods = sorted(
+            periods_dict.values(),
+            key=lambda p: p.end_date,
+            reverse=True
+        )
 
         logger.info(f"Extracted {len(periods)} periods from facts")
         return periods

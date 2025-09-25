@@ -8,10 +8,10 @@ visual fidelity of the original filing.
 
 import logging
 import re
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 from .presentation_models import (
-    PresentationNode, PresentationStatement, StatementType, classify_statement_type
+    PresentationNode, PresentationStatement, classify_statement_type
 )
 
 logger = logging.getLogger(__name__)
@@ -48,16 +48,18 @@ class PresentationParser:
             for role_id, role_data in pres_rels.items():
                 role_def = role_defs.get(role_id, {})
 
-                if self._is_financial_statement_role(role_def):
-                    try:
-                        statement = self._parse_single_statement(
-                            role_id, role_data, role_def, concepts
-                        )
-                        statements.append(statement)
-                        logger.info(f"Parsed statement: {statement.statement_name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to parse statement {role_id}: {e}")
-                        continue
+                if not self._is_financial_statement_role(role_def):
+                    continue
+
+                try:
+                    statement = self._parse_single_statement(
+                        role_id, role_data, role_def, concepts
+                    )
+                    statements.append(statement)
+                    logger.info(f"Parsed statement: {statement.statement_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to parse statement {role_id}: {e}")
+                    continue
 
         except Exception as e:
             logger.error(f"Error parsing presentation statements: {e}")
@@ -75,7 +77,12 @@ class PresentationParser:
         Returns:
             True if this role represents a financial statement
         """
-        label = role_def.get('en', '').lower()
+        label = (
+            role_def.get('label')
+            or role_def.get('en')
+            or role_def.get('en-us')
+            or ''
+        ).lower()
 
         # Look for financial statement indicators in role label
         financial_keywords = [
@@ -88,8 +95,13 @@ class PresentationParser:
 
         return any(keyword in label for keyword in financial_keywords)
 
-    def _parse_single_statement(self, role_id: str, role_data: dict,
-                               role_def: dict, concepts: dict) -> PresentationStatement:
+    def _parse_single_statement(
+        self,
+        role_id: str,
+        role_data: dict,
+        role_def: dict,
+        concepts: dict
+    ) -> PresentationStatement:
         """Parse a single statement's presentation tree.
 
         Args:
@@ -103,8 +115,7 @@ class PresentationParser:
         """
         logger.debug(f"Parsing statement for role {role_id}")
 
-        # Find root elements - these are top-level concepts with no parents
-        root_concepts = self._find_root_concepts(role_data)
+        root_concepts, relationships = self._normalize_role_data(role_data)
 
         if not root_concepts:
             raise ValueError(f"No root concepts found for role {role_id}")
@@ -116,7 +127,7 @@ class PresentationParser:
         for root_concept in root_concepts:
             try:
                 node = self._build_presentation_tree(
-                    root_concept, role_data, concepts, depth=0
+                    root_concept, relationships, concepts, depth=0
                 )
                 root_nodes.append(node)
             except Exception as e:
@@ -127,7 +138,9 @@ class PresentationParser:
             raise ValueError(f"No valid presentation trees built for role {role_id}")
 
         # Extract statement name and classify type
-        statement_name = self._extract_statement_name(role_def.get('en', ''))
+        statement_name = self._extract_statement_name(
+            role_def.get('label') or role_def.get('en') or role_def.get('en-us') or ''
+        )
         statement_type = classify_statement_type(statement_name)
 
         return PresentationStatement(
@@ -138,32 +151,77 @@ class PresentationParser:
             root_nodes=root_nodes
         )
 
-    def _find_root_concepts(self, role_data: dict) -> List[str]:
-        """Find root concepts in presentation relationships.
+    def _normalize_role_data(self, role_data: dict) -> Tuple[List[str], Dict[str, dict]]:
+        """Normalize role data into root concept list and relationship map.
 
-        Root concepts are those that appear as parents but never as children.
-
-        Args:
-            role_data: Presentation relationships for a role
-
-        Returns:
-            List of root concept names
+        Supports both the viewer JSON structure (rootElts + elrs) and the
+        simplified test fixture structure (parent -> [children]).
         """
-        # Collect all child concepts
-        all_children = set()
-        for parent_concept, children in role_data.items():
-            for child in children:
-                all_children.add(child['t'])
 
-        # Root concepts are parents that are never children
-        root_concepts = [
-            concept for concept in role_data.keys()
-            if concept not in all_children
-        ]
+        # Viewer JSON structure
+        if 'rootElts' in role_data:
+            root_concepts = list(role_data.get('rootElts', []))
+            relationships: Dict[str, dict] = {}
 
+            elrs = role_data.get('elrs', {})
+            for elr_uri, elr_data in elrs.items():
+                for concept, data in elr_data.items():
+                    rel_entry = relationships.setdefault(concept, {
+                        'order': data.get('order', 0),
+                        'preferredLabel': data.get('preferredLabel'),
+                        'children': {}
+                    })
+
+                    for child_concept, child_data in data.get('children', {}).items():
+                        rel_entry['children'][child_concept] = child_data or {}
+
+            return root_concepts, relationships
+
+        # Some sources wrap relationships under "relationships"
+        if 'relationships' in role_data:
+            role_data = role_data['relationships']
+
+        # Simplified structure: parent -> list of {"t": child, ...}
+        all_children = {
+            child.get('t')
+            for children in role_data.values()
+            for child in children
+            if isinstance(child, dict)
+        }
+        root_concepts = [concept for concept in role_data.keys() if concept not in all_children]
+
+        relationships = {}
+        for parent, children in role_data.items():
+            entry = relationships.setdefault(parent, {
+                'order': 0,
+                'preferredLabel': None,
+                'children': {}
+            })
+
+            for idx, child in enumerate(children):
+                if not isinstance(child, dict):
+                    continue
+
+                child_concept = child.get('t')
+                if not child_concept:
+                    continue
+
+                child_entry = {
+                    'order': child.get('order', idx),
+                    'preferredLabel': child.get('preferredLabel'),
+                    'children': child.get('children') or {}
+                }
+                entry['children'][child_concept] = child_entry
+
+        return root_concepts, relationships
+
+    def _find_root_concepts(self, role_data: dict) -> List[str]:
+        """Compatibility helper to expose root concepts for a role."""
+
+        root_concepts, _ = self._normalize_role_data(role_data)
         return root_concepts
 
-    def _build_presentation_tree(self, concept: str, role_data: dict,
+    def _build_presentation_tree(self, concept: str, relationships: Dict[str, dict],
                                 concepts: dict, depth: int) -> PresentationNode:
         """Recursively build presentation tree from relationships.
 
@@ -178,21 +236,32 @@ class PresentationParser:
         """
         logger.debug(f"Building tree for {concept} at depth {depth}")
 
-        # Get children for this concept
-        children_data = role_data.get(concept, [])
-        children = []
+        # Allow callers to pass the raw viewer relationships map (list based)
+        if (
+            concept not in relationships
+            or isinstance(relationships.get(concept), list)
+        ):
+            _, relationships = self._normalize_role_data({'relationships': relationships})
 
-        for child_rel in children_data:
-            child_concept = child_rel['t']
+        rel_data = relationships.get(concept, {})
+        children: List[PresentationNode] = []
 
+        for child_concept, child_data in rel_data.get('children', {}).items():
             try:
                 child_node = self._build_presentation_tree(
-                    child_concept, role_data, concepts, depth + 1
+                    child_concept, relationships, concepts, depth + 1
                 )
 
                 # Update child properties from relationship data
-                # Note: order and preferred label would come from the relationship
-                # but our test data format doesn't include them
+                child_node.order = child_data.get('order', child_node.order)
+                child_node.preferred_label_role = child_data.get('preferredLabel')
+
+                if child_node.preferred_label_role:
+                    preferred_label = self._get_preferred_label(
+                        child_concept, child_node.preferred_label_role, concepts
+                    )
+                    if preferred_label:
+                        child_node.label = preferred_label
 
                 children.append(child_node)
 
@@ -200,14 +269,16 @@ class PresentationParser:
                 logger.warning(f"Failed to build child {child_concept}: {e}")
                 continue
 
-        # Create the node
+        # Sort children based on presentation order
+        children.sort(key=lambda node: node.order)
+
         node = PresentationNode(
             concept=concept,
             label=self._get_concept_label(concept, concepts),
-            order=0,  # Would be set from relationship data in real implementation
+            order=rel_data.get('order', 0),
             depth=depth,
             abstract=self._is_abstract_concept(concept, concepts),
-            preferred_label_role=None,  # Would be set from relationship data
+            preferred_label_role=rel_data.get('preferredLabel'),
             children=children
         )
 
@@ -226,20 +297,26 @@ class PresentationParser:
         """
         concept_data = concepts.get(concept, {})
 
-        # Try standard label first
-        if 'l' in concept_data and concept_data['l']:
-            return concept_data['l']
+        if not concept_data:
+            return self._humanize_concept_name(concept)
 
-        # Try labels dictionary
+        # Try canonical label fields (viewer JSON often stores under "l" or "label")
+        for key in ('l', 'label', 'en', 'en-us'):
+            label_value = concept_data.get(key)
+            if isinstance(label_value, str) and label_value.strip():
+                return label_value
+
+        # Try labels dictionary (may be nested by role and language)
         labels = concept_data.get('labels', {})
-        for label_type in ['std', 'terseLabel', 'verboseLabel', 'label']:
-            if label_type in labels:
-                label_data = labels[label_type]
-                if isinstance(label_data, dict):
-                    # Handle language-specific labels
-                    return label_data.get('en-us', label_data.get('en', ''))
-                else:
-                    return str(label_data)
+        preferred_order = ['std', 'terseLabel', 'totalLabel', 'verboseLabel', 'label']
+        for label_type in preferred_order:
+            label_data = labels.get(label_type)
+            if isinstance(label_data, dict):
+                for lang_key in ('en-us', 'en'):
+                    if label_data.get(lang_key):
+                        return label_data[lang_key]
+            elif label_data:
+                return str(label_data)
 
         # Fallback to humanized concept name
         return self._humanize_concept_name(concept)
