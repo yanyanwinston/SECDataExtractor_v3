@@ -116,9 +116,24 @@ class EdgarClient:
         logger.info(f"Looking up company by ticker: {ticker}")
 
         try:
-            # Use the company tickers JSON endpoint
-            url = f"{self.DATA_URL}/company_tickers.json"
-            response = self._make_request(url)
+            # Try multiple possible endpoints for company tickers
+            urls = [
+                f"{self.BASE_URL}/files/company_tickers.json",
+                f"{self.DATA_URL}/company_tickers.json",
+                f"{self.BASE_URL}/Archives/edgar/cik-lookup-data.txt"
+            ]
+
+            response = None
+            for url in urls:
+                try:
+                    response = self._make_request(url)
+                    break
+                except EdgarError:
+                    continue
+
+            if response is None:
+                raise EdgarError("Could not access any company tickers endpoint")
+
             tickers_data = response.json()
 
             # Search for the ticker
@@ -200,13 +215,82 @@ class EdgarClient:
         logger.info(f"Getting submissions for CIK: {cik}")
 
         try:
-            url = f"{self.DATA_URL}/submissions/CIK{cik}.json"
-            response = self._make_request(url)
-            return response.json()
+            # Use the ATOM feed which is more stable
+            atom_url = f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=10-K&dateb=&owner=exclude&count=40&output=atom"
+            response = self._make_request(atom_url)
+            return self._parse_atom_feed(response.text, cik)
 
         except Exception as e:
             logger.error(f"Error getting submissions for CIK {cik}: {e}")
             raise EdgarError(f"Failed to get submissions for CIK {cik}: {e}")
+
+    def _parse_atom_feed(self, atom_text: str, cik: str) -> Dict[str, Any]:
+        """Parse ATOM feed format into submissions structure."""
+        import xml.etree.ElementTree as ET
+
+        try:
+            # Debug: log the ATOM feed content
+            logger.debug(f"ATOM feed content: {atom_text[:1000]}...")
+
+            root = ET.fromstring(atom_text)
+
+            # Extract entries from ATOM feed
+            filings = []
+            for entry in root.findall('.//{http://www.w3.org/2005/Atom}entry'):
+                title_elem = entry.find('.//{http://www.w3.org/2005/Atom}title')
+                link_elem = entry.find('.//{http://www.w3.org/2005/Atom}link')
+                updated_elem = entry.find('.//{http://www.w3.org/2005/Atom}updated')
+
+                if title_elem is not None and link_elem is not None:
+                    title = title_elem.text or ""
+                    href = link_elem.get('href', '')
+
+                    # Extract filing date and accession number from title or link
+                    filing_date = ""
+                    if updated_elem is not None:
+                        filing_date = updated_elem.text.split('T')[0]
+
+                    # Extract accession number from URL
+                    accession = ""
+                    if '/Archives/edgar/data/' in href:
+                        parts = href.split('/')
+                        for part in parts:
+                            if len(part) == 20 and part.replace('-', '').isdigit():
+                                accession = part
+                                break
+
+                    # Determine form type from title
+                    form = "10-K"  # Default to 10-K for now
+                    if "10-Q" in title.upper():
+                        form = "10-Q"
+                    elif "10-K" in title.upper():
+                        form = "10-K"
+
+                    filings.append({
+                        'accessionNumber': accession,
+                        'filingDate': filing_date,
+                        'form': form,
+                        'primaryDocument': href.split('/')[-1] if href else "",
+                        'primaryDocDescription': title
+                    })
+
+            # Return in the format expected by the rest of the code
+            return {
+                'cik': cik,
+                'filings': {
+                    'recent': {
+                        'accessionNumber': [f.get('accessionNumber', '') for f in filings],
+                        'filingDate': [f.get('filingDate', '') for f in filings],
+                        'form': [f.get('form', '') for f in filings],
+                        'primaryDocument': [f.get('primaryDocument', '') for f in filings],
+                        'primaryDocDescription': [f.get('primaryDocDescription', '') for f in filings]
+                    }
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error parsing ATOM feed: {e}")
+            raise EdgarError(f"Failed to parse ATOM feed for CIK {cik}: {e}")
 
     def search_filings(
         self,
