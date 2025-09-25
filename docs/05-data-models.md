@@ -103,289 +103,77 @@ class PresentationNode:
 
 ## Data Parser Implementation
 
-The `DataParser` class in `src/processor/data_parser.py` handles the conversion from iXBRL viewer JSON to our data models using **presentation-based parsing** to maintain exact visual fidelity with the iXBRL viewer. This approach leverages Arelle's presentation relationships instead of grouping facts by concept patterns.
+The processor now depends exclusively on the presentation metadata emitted by Arelle. Legacy fact-grouping code has been removed; every call flows through the presentation parser and fact matcher.
 
 ### DataParser Class
 
 ```python
-from .data_models import Statement, Period, Row, Cell, ProcessingResult
+from typing import Dict, Any, List, Optional
+
+from .data_models import Statement, Period, ProcessingResult
 from .value_formatter import ValueFormatter
+from .presentation_parser import PresentationParser
+from .fact_matcher import FactMatcher
+from .presentation_models import StatementTable
+
 
 class DataParser:
-    """Parser for converting iXBRL viewer JSON to structured data models."""
+    """Convert viewer JSON into the flattened Statement models used by Excel."""
 
     def __init__(self, formatter: Optional[ValueFormatter] = None):
         self.formatter = formatter or ValueFormatter()
+        self.presentation_parser = PresentationParser()
+        self.fact_matcher = FactMatcher(self.formatter)
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
-        """Main entry point - parse viewer JSON into ProcessingResult."""
+        company_name = self._extract_company_name(viewer_data)
+        filing_date = self._extract_filing_date(viewer_data)
+        form_type = self._extract_form_type(viewer_data)
+
         try:
-            # Extract metadata
-            company_name = self._extract_company_name(viewer_data)
-            filing_date = self._extract_filing_date(viewer_data)
-            form_type = self._extract_form_type(viewer_data)
-
-            # Parse statements
-            statements = self._parse_statements(viewer_data)
-
+            statements = self._parse_with_presentation(viewer_data)
+        except Exception as exc:
             return ProcessingResult(
-                statements=statements,
+                statements=[],
                 company_name=company_name,
                 filing_date=filing_date,
                 form_type=form_type,
-                success=True
+                success=False,
+                error=str(exc),
             )
-        except Exception as e:
+
+        if not statements:
             return ProcessingResult(
-                statements=[], company_name="", filing_date="",
-                form_type="", success=False, error=str(e)
+                statements=[],
+                company_name=company_name,
+                filing_date=filing_date,
+                form_type=form_type,
+                success=False,
+                error="No presentation statements with fact data were produced",
             )
-```
 
-### Presentation-Based Parsing (v3.1 Approach)
-
-The parser uses the presentation relationships from the viewer JSON to build statements in the exact order they appear in the iXBRL viewer:
-
-#### 1. New Arelle 2.37+ Format (sourceReports)
-```python
-def _parse_source_reports_format(self, data: Dict[str, Any]) -> List[Statement]:
-    """Parse the new sourceReports format using presentation structure"""
-    source_reports = data.get('sourceReports', [])
-    target_data = source_reports[0]['targetReports'][0]
-
-    # Extract core components
-    role_defs = target_data.get('roleDefs', {})
-    relationships = target_data.get('rels', {})
-    concepts = target_data.get('concepts', {})
-    facts = target_data.get('facts', {})
-
-    statements = []
-    for role_id, role_info in role_defs.items():
-        # Build presentation tree for this statement
-        presentation_tree = self._build_presentation_tree(
-            role_id, relationships, concepts
+        return ProcessingResult(
+            statements=statements,
+            company_name=company_name,
+            filing_date=filing_date,
+            form_type=form_type,
+            success=True,
         )
-
-        # Convert tree to statement with fact matching
-        statement = self._tree_to_statement(
-            presentation_tree, facts, role_info
-        )
-
-        if statement and statement.rows:
-            statements.append(statement)
-
-    return statements
 ```
 
-#### 2. Presentation Tree Construction
-```python
-def _build_presentation_tree(self, role_id: str,
-                           relationships: Dict[str, Any],
-                           concepts: Dict[str, Any]) -> List[PresentationNode]:
-    """Build hierarchical presentation tree from relationships."""
+### Presentation-First Flow
 
-    # Find presentation relationships for this role
-    pres_rels = []
-    for rel_key, rel_data in relationships.items():
-        if rel_data.get('role') == role_id and rel_data.get('arcrole') == 'parent-child':
-            pres_rels.append(rel_data)
+1. **Parse presentation relationships** – `PresentationParser.parse_presentation_statements` walks the viewer JSON and returns `PresentationStatement` trees for every role that looks like a statement, schedule, or disclosure.
+2. **Extract periods and facts** – `FactMatcher.extract_periods_from_facts` normalises reporting periods straight from the viewer facts payload, and `_extract_facts_from_viewer_data` pulls the corresponding fact dictionary.
+3. **Match facts to presentation nodes** – `FactMatcher.match_facts_to_statement` produces `StatementTable` instances where each presentation row is paired with per-period `Cell` values.
+4. **Flatten for Excel** – `_convert_statement_tables_to_legacy_format` converts the presentation-aware structures into the existing `Statement`/`Row` models consumed by the Excel generator.
 
-    # Build tree structure
-    root_nodes = []
-    node_map = {}
+### Failure Handling
 
-    for rel in sorted(pres_rels, key=lambda r: r.get('order', 0)):
-        from_concept = rel.get('from')
-        to_concept = rel.get('to')
-        preferred_label = rel.get('preferredLabel')
+- Missing presentation roles, reporting periods, or facts now raise `ValueError` from `_parse_with_presentation`; the top-level `parse_viewer_data` turns those into `ProcessingResult(success=False, error=...)` responses.
+- When a role parses successfully but contains no populated cells, the parser logs the condition and omits the statement, surfacing an error if this leaves the result empty.
 
-        # Create nodes if not exists
-        if to_concept not in node_map:
-            concept_info = concepts.get(to_concept, {})
-            node_map[to_concept] = PresentationNode(
-                concept=to_concept,
-                preferred_label=self._get_preferred_label(
-                    concept_info, preferred_label
-                ),
-                depth=0,  # Will be calculated during tree traversal
-                is_abstract=concept_info.get('abstract', False)
-            )
-
-        # Build parent-child relationships
-        if from_concept:
-            if from_concept not in node_map:
-                from_concept_info = concepts.get(from_concept, {})
-                node_map[from_concept] = PresentationNode(
-                    concept=from_concept,
-                    preferred_label=self._get_preferred_label(
-                        from_concept_info, None
-                    ),
-                    depth=0,
-                    is_abstract=from_concept_info.get('abstract', False)
-                )
-
-            # Link parent to child
-            parent_node = node_map[from_concept]
-            child_node = node_map[to_concept]
-            child_node.parent = parent_node
-            parent_node.children.append(child_node)
-        else:
-            # Root node
-            root_nodes.append(node_map[to_concept])
-
-    # Calculate depths
-    self._calculate_tree_depths(root_nodes)
-
-    return root_nodes
-```
-
-#### 3. Tree to Statement Conversion
-```python
-def _tree_to_statement(self, presentation_tree: List[PresentationNode],
-                      facts: Dict[str, Any], role_info: Dict[str, Any]) -> Statement:
-    """Convert presentation tree to Statement with fact matching."""
-
-    # Extract statement metadata
-    statement_name = role_info.get('definition', 'Unknown Statement')
-    short_name = self._get_short_name(statement_name)
-
-    # Extract periods from facts
-    periods = self._extract_periods_from_facts(facts)
-
-    # Traverse tree and create rows
-    rows = []
-    for root_node in presentation_tree:
-        self._traverse_node(root_node, rows, facts, periods)
-
-    return Statement(
-        name=statement_name,
-        short_name=short_name,
-        periods=periods,
-        rows=rows
-    )
-
-def _traverse_node(self, node: PresentationNode, rows: List[Row],
-                  facts: Dict[str, Any], periods: List[Period]) -> None:
-    """Recursively traverse presentation node and create rows."""
-
-    # Create cells by matching facts to this concept
-    cells = {}
-    for period in periods:
-        cell = self._match_fact_to_concept(node.concept, period, facts)
-        if cell:
-            cells[period.label] = cell
-
-    # Create row
-    row = Row(
-        label=node.preferred_label,
-        concept=node.concept,
-        is_abstract=node.is_abstract,
-        depth=node.depth,
-        cells=cells
-    )
-    rows.append(row)
-
-    # Recursively process children
-    for child in node.children:
-        self._traverse_node(child, rows, facts, periods)
-```
-
-#### 4. Legacy Format (roles-based)
-```python
-def _parse_legacy_format(self, data: Dict[str, Any]) -> List[Statement]:
-    """Parse the legacy format using presentation structure when available"""
-    statements = []
-    roles = data.get('roles', {})
-
-    for role_id, role_data in roles.items():
-        # Try presentation-based parsing first
-        if 'relationships' in data:
-            statement = self._parse_statement_with_presentation(
-                role_id, role_data, data
-            )
-        else:
-            # Fallback to fact-based parsing for older formats
-            statement = self._parse_single_statement(role_id, role_data, data)
-
-        if statement and statement.rows:
-            statements.append(statement)
-
-    return statements
-```
-
-### Statement Type Detection
-
-```python
-def _get_short_name(self, full_name: str) -> str:
-    """Get short name for Excel sheet tabs."""
-    name_lower = full_name.lower()
-
-    if 'balance' in name_lower or 'position' in name_lower:
-        return "Balance Sheet"
-    elif any(term in name_lower for term in ['income', 'operations', 'comprehensive']):
-        return "Income Statement"
-    elif 'cash' in name_lower and 'flow' in name_lower:
-        return "Cash Flows"
-    elif 'equity' in name_lower or 'stockholder' in name_lower:
-        return "Equity"
-    else:
-        return full_name[:20]  # Truncate long names
-```
-
-### Fact Matching and Value Formatting
-
-The presentation-based parser matches facts to presentation nodes and formats values:
-
-```python
-def _match_fact_to_concept(self, concept: str, period: Period,
-                         facts: Dict[str, Any]) -> Optional[Cell]:
-    """Match a fact to a presentation concept for a specific period."""
-
-    # Search facts for matching concept and period
-    for fact_id, fact_data in facts.items():
-        fact_attrs = fact_data.get('a', {})
-
-        if (fact_attrs.get('c') == concept and
-            self._period_matches(fact_attrs.get('p'), period)):
-
-            # Extract fact value
-            raw_value = fact_attrs.get('v')
-            unit = fact_attrs.get('m')
-            decimals = fact_attrs.get('d')
-
-            if raw_value is not None:
-                # Apply formatting
-                formatted_value = self.formatter.format_cell_value(
-                    raw_value, unit, decimals, concept
-                )
-
-                return Cell(
-                    value=formatted_value,
-                    raw_value=raw_value,
-                    unit=unit,
-                    decimals=decimals,
-                    period=period.label
-                )
-
-    return None  # No matching fact found
-
-def _get_preferred_label(self, concept_info: Dict[str, Any],
-                        preferred_label_ref: Optional[str]) -> str:
-    """Get the preferred label for a concept."""
-
-    labels = concept_info.get('labels', {})
-
-    # Try preferred label first
-    if preferred_label_ref and preferred_label_ref in labels:
-        return labels[preferred_label_ref]
-
-    # Fallback to standard label
-    if 'std' in labels:
-        return labels['std']
-
-    # Last resort: use concept name
-    return concept_info.get('name', 'Unknown')
-```
+This tighter contract removes the silent legacy fallback and makes failures explicit so we can diagnose problematic filings faster.
 
 ## Usage in Pipeline
 

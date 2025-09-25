@@ -576,225 +576,98 @@ class FactMatcher:
 ```python
 import logging
 from typing import Dict, Any, List, Optional
+
 from .data_models import Statement, Period, ProcessingResult
 from .value_formatter import ValueFormatter
 from .presentation_parser import PresentationParser
 from .fact_matcher import FactMatcher
-from .presentation_models import StatementType
+from .presentation_models import StatementType, StatementTable
 
 logger = logging.getLogger(__name__)
 
+
 class DataParser:
-    """Updated parser using presentation structure"""
+    """Parser that relies entirely on presentation metadata."""
 
     def __init__(self, formatter: Optional[ValueFormatter] = None):
         self.formatter = formatter or ValueFormatter()
         self.presentation_parser = PresentationParser()
-        self.fact_matcher = FactMatcher(formatter)
-
-        # Feature flag for backwards compatibility
-        self.use_presentation_parsing = True
+        self.fact_matcher = FactMatcher(self.formatter)
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
-        """Main entry point - now uses presentation structure"""
+        company_name = self._extract_company_name(viewer_data)
+        filing_date = self._extract_filing_date(viewer_data)
+        form_type = self._extract_form_type(viewer_data)
 
         try:
-            # Extract metadata (keep existing methods)
-            company_name = self._extract_company_name(viewer_data)
-            filing_date = self._extract_filing_date(viewer_data)
-            form_type = self._extract_form_type(viewer_data)
-
-            if self.use_presentation_parsing:
-                statements = self._parse_with_presentation(viewer_data)
-            else:
-                # Fallback to legacy parsing
-                statements = self._parse_legacy_format(viewer_data)
-
+            statements = self._parse_with_presentation(viewer_data)
+        except Exception as exc:
+            logger.error("Error parsing viewer data: %s", exc)
             return ProcessingResult(
-                statements=statements,
+                statements=[],
                 company_name=company_name,
                 filing_date=filing_date,
                 form_type=form_type,
-                success=True
+                success=False,
+                error=str(exc),
             )
 
-        except Exception as e:
-            logger.error(f"Error parsing viewer data: {e}")
+        if not statements:
+            error = "No presentation statements with fact data were produced"
+            logger.error(error)
             return ProcessingResult(
                 statements=[],
-                company_name="Unknown Company",
-                filing_date="Unknown Date",
-                form_type="Unknown Form",
+                company_name=company_name,
+                filing_date=filing_date,
+                form_type=form_type,
                 success=False,
-                error=str(e)
+                error=error,
             )
 
-    def _parse_with_presentation(self, viewer_data: Dict[str, Any]) -> List[Statement]:
-        """New presentation-based parsing"""
-
-        logger.info("Using presentation-based parsing")
-
-        # Parse presentation structure
-        presentation_statements = self.presentation_parser.parse_presentation_statements(
-            viewer_data
+        return ProcessingResult(
+            statements=statements,
+            company_name=company_name,
+            filing_date=filing_date,
+            form_type=form_type,
+            success=True,
         )
 
+    def _parse_with_presentation(self, viewer_data: Dict[str, Any]) -> List[Statement]:
+        presentation_statements = self.presentation_parser.parse_presentation_statements(viewer_data)
         if not presentation_statements:
-            logger.warning("No presentation statements found, falling back to legacy parsing")
-            return self._parse_legacy_format(viewer_data)
+            raise ValueError("No presentation statements found in viewer data")
 
-        # Extract periods and facts
         periods = self._extract_periods_from_viewer_data(viewer_data)
+        if not periods:
+            raise ValueError("No reporting periods found in viewer data")
+
         facts = self._extract_facts_from_viewer_data(viewer_data)
+        if not facts:
+            raise ValueError("No facts found in viewer data")
 
-        # Match facts to presentation for each statement
-        statement_tables = []
+        primary_tables: List[StatementTable] = []
+        supplemental_tables: List[StatementTable] = []
+
         for pres_statement in presentation_statements:
+            table = self.fact_matcher.match_facts_to_statement(pres_statement, facts, periods)
+
+            if not self._statement_table_has_data(table):
+                logger.debug(
+                    "Statement %s has no fact data; skipping",
+                    pres_statement.statement_name,
+                )
+                continue
+
             if self._is_primary_statement(pres_statement):
-                try:
-                    table = self.fact_matcher.match_facts_to_statement(
-                        pres_statement, facts, periods
-                    )
-                    statement_tables.append(table)
-                    logger.info(f"Matched facts for: {pres_statement.statement_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to match facts for {pres_statement.statement_name}: {e}")
-                    continue
-
-        # Convert to existing Statement format for compatibility with Excel generator
-        statements = self._convert_statement_tables_to_legacy_format(statement_tables)
-
-        logger.info(f"Parsed {len(statements)} statements using presentation structure")
-        return statements
-
-    def _is_primary_statement(self, statement) -> bool:
-        """Check if this is a primary financial statement"""
-        primary_types = {
-            StatementType.BALANCE_SHEET,
-            StatementType.INCOME_STATEMENT,
-            StatementType.CASH_FLOWS,
-            StatementType.EQUITY
-        }
-        return statement.statement_type in primary_types
-
-    def _extract_periods_from_viewer_data(self, viewer_data: Dict[str, Any]) -> List[Period]:
-        """Extract periods from viewer data"""
-        periods = []
-
-        try:
-            # Get facts to extract periods from
-            facts = self._extract_facts_from_viewer_data(viewer_data)
-            period_map = {}
-
-            # Collect unique periods from facts
-            for fact_data in facts.values():
-                for context_data in fact_data.values():
-                    if not isinstance(context_data, dict):
-                        continue
-
-                    period_str = context_data.get('p')
-                    if period_str and period_str not in period_map:
-                        # Parse period string
-                        period = self._parse_period_string(period_str)
-                        if period:
-                            period_map[period_str] = period
-
-            # Sort periods by date (most recent first)
-            periods = list(period_map.values())
-            periods.sort(key=lambda p: p.end_date, reverse=True)
-
-        except Exception as e:
-            logger.error(f"Error extracting periods: {e}")
-
-        return periods
-
-    def _parse_period_string(self, period_str: str) -> Optional[Period]:
-        """Parse period string into Period object"""
-        try:
-            if '/' in period_str:
-                # Duration period: "2022-09-25/2023-10-01"
-                start_str, end_str = period_str.split('/')
-                return Period(
-                    label=f"{start_str} to {end_str}",
-                    end_date=end_str,
-                    instant=False
-                )
+                primary_tables.append(table)
             else:
-                # Instant period: "2023-09-30"
-                return Period(
-                    label=period_str,
-                    end_date=period_str,
-                    instant=True
-                )
-        except Exception:
-            return None
+                supplemental_tables.append(table)
 
-    def _extract_facts_from_viewer_data(self, viewer_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract facts from viewer data"""
-        try:
-            return viewer_data['sourceReports'][0]['targetReports'][0]['facts']
-        except (KeyError, IndexError):
-            logger.error("Could not extract facts from viewer data")
-            return {}
+        statement_tables = primary_tables + supplemental_tables
+        if not statement_tables:
+            raise ValueError("Presentation statements contained no matchable fact data")
 
-    def _convert_statement_tables_to_legacy_format(self, tables: List) -> List[Statement]:
-        """Convert StatementTable objects to legacy Statement format"""
-
-        statements = []
-
-        for table in tables:
-            # Create legacy Statement object
-            statement = Statement(
-                name=table.statement.statement_name,
-                short_name=self._get_short_name(table.statement.statement_name),
-                periods=table.periods,
-                rows=[]  # Will be populated below
-            )
-
-            # Convert StatementRow objects to legacy Row format
-            from .data_models import Row
-
-            for statement_row in table.rows:
-                row = Row(
-                    label=statement_row.node.label,
-                    concept=statement_row.node.concept,
-                    is_abstract=statement_row.node.abstract,
-                    depth=statement_row.node.depth,
-                    cells=statement_row.cells
-                )
-
-                # Add reference to presentation node for Excel generator
-                row.presentation_node = statement_row.node
-
-                statement.rows.append(row)
-
-            statements.append(statement)
-
-        return statements
-
-    def _get_short_name(self, statement_name: str) -> str:
-        """Get short name for Excel sheet tabs"""
-        name_lower = statement_name.lower()
-
-        if any(term in name_lower for term in ['balance', 'position']):
-            return "Balance Sheet"
-        elif any(term in name_lower for term in ['income', 'operations', 'comprehensive']):
-            return "Income Statement"
-        elif any(term in name_lower for term in ['cash', 'flow']):
-            return "Cash Flows"
-        elif any(term in name_lower for term in ['equity', 'stockholder']):
-            return "Equity"
-        else:
-            return statement_name[:20]  # Truncate long names
-
-    # Keep all existing methods for backwards compatibility
-    def _parse_legacy_format(self, viewer_data: Dict[str, Any]) -> List[Statement]:
-        """Legacy parsing method (existing implementation)"""
-        # This would be the current implementation
-        # Kept for backwards compatibility during transition
-        return self._parse_statements(viewer_data)
-
-    # ... (keep all existing extraction methods for metadata and legacy parsing)
+        return self._convert_statement_tables_to_legacy_format(statement_tables)
 ```
 
 ### Step 4.2: Update Excel Generator
@@ -1008,65 +881,36 @@ import pytest
 from src.processor.data_parser import DataParser
 from src.processor.value_formatter import ValueFormatter
 
+
 class TestPresentationIntegration:
+    """Exercise the full presentation-first pipeline."""
 
     def test_end_to_end_presentation_parsing(self, apple_viewer_data):
-        """Test complete pipeline with presentation parsing"""
         formatter = ValueFormatter(scale_millions=True)
         parser = DataParser(formatter)
-        parser.use_presentation_parsing = True
 
         result = parser.parse_viewer_data(apple_viewer_data)
 
         assert result.success
         assert len(result.statements) >= 3  # BS, IS, CF minimum
 
-        # Check statement names are proper
         statement_names = [s.name for s in result.statements]
-        assert any("Balance" in name for name in statement_names)
-        assert any("Income" in name or "Operations" in name for name in statement_names)
-        assert any("Cash" in name for name in statement_names)
+        assert any('Balance' in name for name in statement_names)
+        assert any('Income' in name or 'Operations' in name for name in statement_names)
+        assert any('Cash' in name for name in statement_names)
 
-        # Check data quality
         for statement in result.statements:
-            assert len(statement.periods) > 0
-            assert len(statement.rows) > 0
+            assert statement.periods
+            assert statement.rows
+            assert any(cell.value != '—' for row in statement.rows for cell in row.cells.values())
 
-            # Should have some non-empty rows
-            data_rows = [r for r in statement.rows if any(
-                cell.value != "—" for cell in r.cells.values()
-            )]
-            assert len(data_rows) > 0
-
-    def test_presentation_vs_legacy_comparison(self, sample_viewer_data):
-        """Compare presentation parsing vs legacy parsing"""
+    def test_reports_failure_when_presentation_missing(self, malformed_viewer_data):
         parser = DataParser()
 
-        # Parse with presentation
-        parser.use_presentation_parsing = True
-        pres_result = parser.parse_viewer_data(sample_viewer_data)
+        result = parser.parse_viewer_data(malformed_viewer_data)
 
-        # Parse with legacy
-        parser.use_presentation_parsing = False
-        legacy_result = parser.parse_viewer_data(sample_viewer_data)
-
-        # Presentation parsing should produce better structured output
-        assert pres_result.success
-        assert legacy_result.success
-
-        # Compare statement structure
-        pres_statements = {s.short_name: s for s in pres_result.statements}
-        legacy_statements = {s.short_name: s for s in legacy_result.statements}
-
-        # Should have same statement types but better organization
-        assert set(pres_statements.keys()) >= set(legacy_statements.keys())
-
-        # Presentation should preserve hierarchy better
-        if "Balance Sheet" in pres_statements:
-            pres_bs = pres_statements["Balance Sheet"]
-            # Should have proper indentation levels
-            depths = [getattr(row, 'depth', 0) for row in pres_bs.rows]
-            assert max(depths) > 0  # Should have some indentation
+        assert not result.success
+        assert result.error
 ```
 
 ### Step 5.3: Validation Criteria
@@ -1144,107 +988,32 @@ class TestOutputValidation:
 
 ## PHASE 6: Migration Strategy
 
-### Step 6.1: Feature Flag Implementation
+### Step 6.1: Cut Over to Presentation-Only Parsing
 
 **File:** `render_viewer_to_xlsx.py` (UPDATE)
 
 ```python
-def create_argument_parser() -> argparse.ArgumentParser:
-    """Create and configure argument parser."""
-    parser = argparse.ArgumentParser(
-        description="Convert SEC iXBRL filings to Excel format",
-        formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-
-    # ... existing arguments ...
-
-    # NEW: Feature flag for presentation parsing
-    parser.add_argument(
-        '--use-presentation',
-        action='store_true',
-        default=True,  # Default to new method
-        help='Use presentation linkbase structure (default)'
-    )
-
-    parser.add_argument(
-        '--use-legacy',
-        action='store_true',
-        help='Use legacy fact-based parsing'
-    )
-
-    return parser
-
-def process_filing(args) -> None:
-    """Process the filing through the complete pipeline."""
-
-    # ... existing setup code ...
-
-    # Step 4: Data parsing with method selection
-    logger.info("Step 4: Parsing financial data...")
     formatter = ValueFormatter(
         currency=args.currency,
-        scale_millions=not args.scale_none
+        scale_millions=not args.scale_none,
     )
     data_parser = DataParser(formatter)
-
-    # Set parsing method based on arguments
-    if args.use_legacy:
-        data_parser.use_presentation_parsing = False
-        logger.info("Using legacy fact-based parsing")
-    else:
-        data_parser.use_presentation_parsing = True
-        logger.info("Using presentation-based parsing")
-
     result = data_parser.parse_viewer_data(viewer_data)
 
-    # ... rest of processing ...
+    if not result.success:
+        raise ValueError(f"Data parsing failed: {result.error}")
 ```
 
-### Step 6.2: Gradual Migration Plan
+* Drop the `--use-legacy` / `--use-presentation` switches entirely.
+* Treat parser failures as hard errors so the CLI mirrors the Excel generator's expectations.
+### Step 6.2: Validation Plan
 
-1. **Week 1-2**: Implement presentation parsing alongside existing code
-2. **Week 3**: Add feature flag and parallel testing
-3. **Week 4**: Test with multiple real filings, compare outputs
-4. **Week 5**: Make presentation parsing the default
-5. **Week 6**: Remove legacy code after validation period
-
+1. **Regression sweep**: run the updated presentation pipeline against the existing fixture set and a handful of live filings.
+2. **Excel diffing**: compare new workbooks with prior viewer output to catch formatting regressions.
+3. **Telemetry**: add logging around empty-statement failures so we can triage problematic filings quickly.
 ### Step 6.3: Backwards Compatibility
 
-```python
-# In data_parser.py
-class DataParser:
-
-    def __init__(self, formatter: Optional[ValueFormatter] = None):
-        self.formatter = formatter or ValueFormatter()
-
-        # Feature flag - can be set from environment or config
-        import os
-        self.use_presentation_parsing = os.getenv(
-            'SEC_EXTRACTOR_USE_PRESENTATION', 'true'
-        ).lower() == 'true'
-
-        # Initialize parsers conditionally
-        if self.use_presentation_parsing:
-            self.presentation_parser = PresentationParser()
-            self.fact_matcher = FactMatcher(formatter)
-
-    def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
-        """Parse with method selection"""
-
-        if self.use_presentation_parsing:
-            try:
-                return self._parse_with_presentation(viewer_data)
-            except Exception as e:
-                logger.warning(f"Presentation parsing failed: {e}")
-                logger.info("Falling back to legacy parsing")
-                return self._parse_legacy_format(viewer_data)
-        else:
-            return self._parse_legacy_format(viewer_data)
-```
-
----
-
-## Success Metrics
+The legacy fact-grouping parser has been removed. Presentation parsing is now the sole code path, and callers receive explicit `ProcessingResult` failures when the viewer payload is incomplete. Communicate this change as a breaking behaviour shift and document known filing edge cases so support can assist users who encounter newly surfaced errors.
 
 ### Quantitative Metrics
 
@@ -1278,13 +1047,13 @@ class DataParser:
 **Mitigation**:
 - Start with simple cases, add complexity gradually
 - Comprehensive test suite with various filing types
-- Fallback to legacy parsing for problematic cases
+- Log and analyse any viewer roles we fail to parse so we can patch the parser quickly
 
 ### Risk 2: Missing Presentation Data
 **Issue**: Some concepts might not have proper presentation linkbase info
 **Mitigation**:
-- Hybrid approach: use presentation where available, fact-based for gaps
 - Validate against known good examples
+- Capture gap cases in fixtures and expand parser heuristics
 - Manual review process for edge cases
 
 ### Risk 3: Performance Degradation
@@ -1297,9 +1066,9 @@ class DataParser:
 ### Risk 4: Backwards Compatibility
 **Issue**: Existing users depend on current output format
 **Mitigation**:
-- Feature flag for gradual transition
-- Side-by-side testing
-- Clear migration documentation
+- Communicate the breaking change in release notes
+- Maintain fixture-based regression coverage
+- Provide guidance on interpreting new failure messages
 
 ### Risk 5: Data Quality Issues
 **Issue**: New approach might introduce new types of errors
