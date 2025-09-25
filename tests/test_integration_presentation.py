@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.processor.data_parser import DataParser
+from src.processor.presentation_models import PresentationStatement, StatementType
 from src.processor.value_formatter import ValueFormatter
 
 
@@ -59,3 +60,36 @@ def test_reports_failure_when_presentation_missing(integration_viewer_data):
 
     assert result.success is False
     assert "presentation statements" in (result.error or "").lower()
+
+
+def test_data_parser_filters_by_group_type():
+    parser = DataParser()
+
+    statement = PresentationStatement(
+        role_uri="uri:statement",
+        role_id="ns1",
+        statement_name="Balance",
+        statement_type=StatementType.BALANCE_SHEET,
+        root_nodes=[],
+        r_id="R3",
+        group_type="statement",
+        role_order=1.0
+    )
+
+    disclosure = PresentationStatement(
+        role_uri="uri:disclosure",
+        role_id="ns2",
+        statement_name="Disclosure",
+        statement_type=StatementType.OTHER,
+        root_nodes=[],
+        r_id="R9",
+        group_type="disclosure",
+        role_order=2.0
+    )
+
+    filtered = parser._filter_presentation_statements([statement, disclosure])
+    assert filtered == [statement]
+
+    parser_with_disclosures = DataParser(include_disclosures=True)
+    filtered_inclusive = parser_with_disclosures._filter_presentation_statements([statement, disclosure])
+    assert filtered_inclusive == [statement, disclosure]

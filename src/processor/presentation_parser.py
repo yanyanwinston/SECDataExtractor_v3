@@ -8,7 +8,7 @@ visual fidelity of the original filing.
 
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .presentation_models import (
     PresentationNode, PresentationStatement, classify_statement_type
@@ -37,6 +37,7 @@ class PresentationParser:
             pres_rels = target_report.get('rels', {}).get('pres', {})
             role_defs = target_report.get('roleDefs', {})
             concepts = target_report.get('concepts', {})
+            role_metadata = viewer_data.get('role_map', {})
 
             if not pres_rels:
                 logger.warning("No presentation relationships found in viewer data")
@@ -53,7 +54,7 @@ class PresentationParser:
 
                 try:
                     statement = self._parse_single_statement(
-                        role_id, role_data, role_def, concepts
+                        role_id, role_data, role_def, concepts, role_metadata
                     )
                     statements.append(statement)
                     logger.info(f"Parsed statement: {statement.statement_name}")
@@ -108,7 +109,8 @@ class PresentationParser:
         role_id: str,
         role_data: dict,
         role_def: dict,
-        concepts: dict
+        concepts: dict,
+        role_metadata: Optional[Dict[str, Dict[str, Any]]] = None
     ) -> PresentationStatement:
         """Parse a single statement's presentation tree.
 
@@ -145,8 +147,12 @@ class PresentationParser:
         if not root_nodes:
             raise ValueError(f"No valid presentation trees built for role {role_id}")
 
+        metadata = None
+        if role_metadata:
+            metadata = role_metadata.get(role_def.get('uri', ''))
+
         # Extract statement name and classify type
-        statement_name = self._extract_statement_name(
+        statement_name = metadata.get('longName') if metadata and metadata.get('longName') else self._extract_statement_name(
             role_def.get('label') or role_def.get('en') or role_def.get('en-us') or ''
         )
         statement_type = classify_statement_type(statement_name)
@@ -156,7 +162,12 @@ class PresentationParser:
             role_id=role_id,
             statement_name=statement_name,
             statement_type=statement_type,
-            root_nodes=root_nodes
+            root_nodes=root_nodes,
+            r_id=metadata.get('r_id') if metadata else None,
+            group_type=metadata.get('groupType') if metadata else None,
+            sub_group_type=metadata.get('subGroupType') if metadata else None,
+            role_order=metadata.get('order') if metadata else None,
+            long_name=metadata.get('longName') if metadata else None
         )
 
     def _normalize_role_data(self, role_data: dict) -> Tuple[List[str], Dict[str, dict]]:

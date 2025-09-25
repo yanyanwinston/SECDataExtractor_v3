@@ -1,4 +1,14 @@
 {
+  "role_map": {
+    "http://example.com/role/BalanceSheet": {
+      "r_id": "R3",
+      "groupType": "statement",
+      "subGroupType": null,
+      "longName": "Statement - Consolidated Balance Sheets",
+      "shortName": "Balance Sheets",
+      "order": 3
+    }
+  },
   "sourceReports": [
     {
       "targetReports": [

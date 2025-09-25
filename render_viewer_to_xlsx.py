@@ -20,6 +20,7 @@ Examples:
 """
 
 import argparse
+import csv
 import logging
 import sys
 import tempfile
@@ -29,6 +30,9 @@ from src.processor import (
     InputHandler, ArelleProcessor, ViewerDataExtractor,
     DataParser, ValueFormatter, ExcelGenerator
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def setup_logging(verbose: bool) -> None:
@@ -109,6 +113,18 @@ Examples:
         help='Display raw values without scaling'
     )
 
+    parser.add_argument(
+        '--include-disclosures',
+        action='store_true',
+        help='Include disclosure/detail presentation roles in the workbook'
+    )
+
+    parser.add_argument(
+        '--dump-role-map',
+        type=Path,
+        help='Write MetaLinks role metadata to CSV for inspection'
+    )
+
     # Processing options
     parser.add_argument(
         '--verbose', '-v',
@@ -136,6 +152,40 @@ Examples:
     )
 
     return parser
+
+
+def _dump_role_map(role_map, output_path: Path) -> None:
+    """Write MetaLinks role metadata to CSV for analysis."""
+    if not role_map:
+        logger.warning("Role metadata not available; skipping dump")
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = [
+        'role_uri',
+        'r_id',
+        'groupType',
+        'subGroupType',
+        'longName',
+        'shortName',
+        'order',
+        'isDefault',
+    ]
+
+    try:
+        with output_path.open('w', newline='', encoding='utf-8') as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for role_uri, metadata in sorted(role_map.items(), key=lambda item: item[1].get('order') or float('inf')):
+                row = {'role_uri': role_uri}
+                row.update({key: metadata.get(key) for key in fieldnames if key != 'role_uri'})
+                writer.writerow(row)
+
+        logger.info("Role metadata written to %s", output_path)
+    except Exception as exc:
+        logger.warning("Failed to write role metadata CSV: %s", exc)
 
 
 def validate_arguments(args) -> None:
@@ -176,7 +226,6 @@ def validate_arguments(args) -> None:
 
 def process_filing(args) -> None:
     """Process the filing through the complete pipeline."""
-    logger = logging.getLogger(__name__)
 
     # Create temporary directory
     temp_dir = args.temp_dir or Path(tempfile.gettempdir()) / "sec_processor"
@@ -219,6 +268,10 @@ def process_filing(args) -> None:
         logger.info("Step 3: Extracting viewer data...")
         json_extractor = ViewerDataExtractor()
         viewer_data = json_extractor.extract_viewer_data(viewer_html_path)
+
+        if args.dump_role_map:
+            _dump_role_map(viewer_data.get('role_map'), args.dump_role_map)
+
         logger.info("Viewer data extracted successfully")
 
         # Step 4: Data parsing
@@ -227,7 +280,10 @@ def process_filing(args) -> None:
             currency=args.currency,
             scale_millions=not args.scale_none
         )
-        data_parser = DataParser(formatter)
+        data_parser = DataParser(
+            formatter,
+            include_disclosures=args.include_disclosures
+        )
         result = data_parser.parse_viewer_data(viewer_data)
 
         if not result.success:

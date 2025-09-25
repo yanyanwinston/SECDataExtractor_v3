@@ -47,6 +47,15 @@ class ViewerDataExtractor:
             if not json_data:
                 raise ValueError("No viewer JSON data found in HTML file")
 
+            # Attempt to load supplemental metadata (MetaLinks)
+            meta_links = self._load_meta_links(html_file)
+            if meta_links:
+                json_data['meta_links'] = meta_links
+
+                role_map = self._build_role_map(meta_links, html_file.name)
+                if role_map:
+                    json_data['role_map'] = role_map
+
             logger.info("Successfully extracted viewer JSON data")
             return json_data
 
@@ -105,6 +114,68 @@ class ViewerDataExtractor:
 
         # If no patterns worked, try a more aggressive approach
         return self._extract_json_aggressive(html_content)
+
+    def _load_meta_links(self, html_file: Path) -> Optional[Dict[str, Any]]:
+        """Load MetaLinks.json residing next to the viewer HTML if present."""
+        meta_path = html_file.with_name('MetaLinks.json')
+
+        if not meta_path.exists():
+            return None
+
+        try:
+            with meta_path.open('r', encoding='utf-8') as fp:
+                return json.load(fp)
+        except Exception as exc:
+            logger.warning("Failed to parse MetaLinks.json: %s", exc)
+            return None
+
+    def _build_role_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, Any]]]:
+        """Build role metadata map keyed by role URI.
+
+        Args:
+            meta_links: Parsed MetaLinks JSON data
+            instance_name: File name of the viewer HTML (used to locate report block)
+
+        Returns:
+            Mapping from role URI to role metadata or None if unavailable
+        """
+        instance_data = meta_links.get('instance') or {}
+
+        # Prefer an entry matching the viewer HTML name; fall back to first
+        report_block = instance_data.get(instance_name)
+        if not report_block:
+            if instance_data:
+                report_block = next(iter(instance_data.values()))
+            else:
+                return None
+
+        reports = report_block.get('report')
+        if not isinstance(reports, dict):
+            return None
+
+        role_map: Dict[str, Dict[str, Any]] = {}
+        for role_id, payload in reports.items():
+            role_uri = payload.get('role')
+            if not role_uri:
+                continue
+
+            try:
+                order = payload.get('order')
+                order_value = float(order) if order is not None else None
+            except (TypeError, ValueError):
+                order_value = None
+
+            role_map[role_uri] = {
+                'r_id': role_id,
+                'groupType': payload.get('groupType'),
+                'subGroupType': payload.get('subGroupType'),
+                'longName': payload.get('longName'),
+                'shortName': payload.get('shortName'),
+                'order': order_value,
+                'isDefault': payload.get('isDefault'),
+            }
+
+        return role_map or None
 
     def _clean_json_string(self, json_str: str) -> str:
         """

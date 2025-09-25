@@ -24,6 +24,8 @@
 4. Implement the diagnostic flag for QA visibility.
 5. Add a regression test asserting the TSLA workbook contains only the six primary sheets by default.
 
+_Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataParser` filters by `groupType`, CLI exposes `--include-disclosures` and `--dump-role-map`). Regression test for default sheet count pending once we record a curated expectation file.
+
 ## Problem 2 — Period Overload
 - Primary statements list every context label we encounter (`Jan 23, 2025`, `Jan 09, 2025`, …), while Tesla keeps the expected annual columns (`Dec. 31, 2024`, `Dec. 31, 2023`, `Dec. 31, 2022`).
 - Facts include a mix of instants (cover/segment contexts) and durations (quarterly, trailing twelve months) that we currently treat equally.

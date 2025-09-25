@@ -9,7 +9,7 @@ from .data_models import Statement, Period, Row, ProcessingResult
 from .value_formatter import ValueFormatter
 from .presentation_parser import PresentationParser
 from .fact_matcher import FactMatcher
-from .presentation_models import StatementType, StatementTable
+from .presentation_models import PresentationStatement, StatementType, StatementTable
 
 
 logger = logging.getLogger(__name__)
@@ -18,16 +18,22 @@ logger = logging.getLogger(__name__)
 class DataParser:
     """Parser for converting iXBRL viewer JSON to structured data models."""
 
-    def __init__(self, formatter: Optional[ValueFormatter] = None):
+    def __init__(
+        self,
+        formatter: Optional[ValueFormatter] = None,
+        include_disclosures: bool = False
+    ):
         """
         Initialize data parser.
 
         Args:
             formatter: Value formatter for display formatting
+            include_disclosures: Whether to retain disclosure/detail roles in output
         """
         self.formatter = formatter or ValueFormatter()
         self.presentation_parser = PresentationParser()
         self.fact_matcher = FactMatcher(self.formatter)
+        self.include_disclosures = include_disclosures
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
         """
@@ -164,6 +170,8 @@ class DataParser:
             viewer_data
         )
 
+        presentation_statements = self._filter_presentation_statements(presentation_statements)
+
         if not presentation_statements:
             raise ValueError("No presentation statements found in viewer data")
 
@@ -232,6 +240,31 @@ class DataParser:
             StatementType.EQUITY
         }
         return statement.statement_type in primary_types
+
+    def _filter_presentation_statements(
+        self,
+        statements: List[PresentationStatement]
+    ) -> List[PresentationStatement]:
+        """Filter statements based on MetaLinks group type metadata."""
+
+        if not statements or self.include_disclosures:
+            return statements
+
+        if not any(getattr(stmt, 'group_type', None) for stmt in statements):
+            return statements
+
+        allowed_groups = {'statement', 'document'}
+
+        filtered = [
+            stmt for stmt in statements
+            if (stmt.group_type or '').lower() in allowed_groups
+        ]
+
+        if not filtered:
+            return statements
+
+        filtered.sort(key=lambda stmt: stmt.sort_key())
+        return filtered
 
     def _statement_table_has_data(self, table) -> bool:
         """Determine whether a matched statement table contains any facts."""

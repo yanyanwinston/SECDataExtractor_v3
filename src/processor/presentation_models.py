@@ -69,6 +69,11 @@ class PresentationStatement:
     statement_name: str                # e.g., "Consolidated Balance Sheets"
     statement_type: StatementType      # Classified statement type
     root_nodes: List[PresentationNode] = field(default_factory=list)  # Top-level nodes
+    r_id: Optional[str] = None          # MetaLinks role identifier (e.g., "R3")
+    group_type: Optional[str] = None    # MetaLinks groupType (statement/document/disclosure)
+    sub_group_type: Optional[str] = None  # MetaLinks subGroupType (tables/parenthetical/...)
+    role_order: Optional[float] = None  # MetaLinks order for sorting
+    long_name: Optional[str] = None     # MetaLinks longName for sheet naming
 
     def get_all_nodes_flat(self) -> List[Tuple[PresentationNode, int]]:
         """Return all nodes in presentation order with depth.
@@ -87,7 +92,8 @@ class PresentationStatement:
 
     def get_short_name(self) -> str:
         """Get short name suitable for Excel sheet tabs."""
-        name_lower = self.statement_name.lower()
+        name_source = self.long_name or self.statement_name
+        name_lower = name_source.lower()
 
         if 'balance' in name_lower or 'position' in name_lower:
             return "Balance Sheet"
@@ -101,7 +107,12 @@ class PresentationStatement:
             return "Equity"
         else:
             # Truncate long names for Excel compatibility
-            return self.statement_name[:20] if len(self.statement_name) > 20 else self.statement_name
+            return name_source[:20] if len(name_source) > 20 else name_source
+
+    def sort_key(self) -> tuple:
+        """Return a tuple for ordering statements consistently."""
+        order = self.role_order if self.role_order is not None else float('inf')
+        return (order, self.r_id or '', self.statement_name)
 
     def __str__(self) -> str:
         """String representation of the statement structure."""
