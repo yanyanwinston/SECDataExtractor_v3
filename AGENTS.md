@@ -33,6 +33,8 @@
 - Before review, run `PYTHONPATH=. pytest`, `black`, `flake8`, plus anything specific to changed modules, and document config shifts in `docs/` or CLI help.
 
 ## Current Refactor Status (v3.1)
-- Phases 1 and 2 (viewer JSON analysis and presentation data models) shipped earlier in the cycle.
-- Phase 3.1 (presentation parser) and Phase 3.2 (fact matcher) now consume viewer order, preferred labels, and sorted periods.
-- Next focus: Phase 3.3 integration into `DataParser`, followed by Excel generator updates (Phase 4+) to close the presentation-first pipeline.
+- Phases 1–2 complete: viewer schema captured in `docs/11-refactor-spec-v3.1.md` and presentation models live in `src/processor/presentation_models.py`.
+- Phase 3 wrapped: `PresentationParser`, `FactMatcher`, and `DataParser` now run the presentation-first path end-to-end.
+- Phase 4 in place: `ExcelGenerator` consumes `presentation_node` metadata for indentation, totals, and formatting; still needs regression polish on style imports/format tests.
+- Phase 5 partially covered: parser/model unit tests landed under `tests/test_presentation_*.py`, but integration/Excel validation cases remain TODO.
+- Phase 6 cutover done: `render_viewer_to_xlsx.py` only invokes the new pipeline; schedule a regression sweep + doc updates before tagging the release.
