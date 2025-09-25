@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, Border, Side
 
 from .data_models import Statement, ProcessingResult
 
