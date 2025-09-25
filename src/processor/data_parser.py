@@ -7,6 +7,9 @@ from typing import Dict, Any, List, Optional
 
 from .data_models import Statement, Period, Row, Cell, ProcessingResult
 from .value_formatter import ValueFormatter
+from .presentation_parser import PresentationParser
+from .fact_matcher import FactMatcher
+from .presentation_models import StatementType
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,11 @@ class DataParser:
             formatter: Value formatter for display formatting
         """
         self.formatter = formatter or ValueFormatter()
+        self.presentation_parser = PresentationParser()
+        self.fact_matcher = FactMatcher(self.formatter)
+
+        # Feature flag for backwards compatibility
+        self.use_presentation_parsing = True
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
         """
@@ -40,8 +48,11 @@ class DataParser:
             filing_date = self._extract_filing_date(viewer_data)
             form_type = self._extract_form_type(viewer_data)
 
-            # Parse statements
-            statements = self._parse_statements(viewer_data)
+            # Parse statements using presentation-based or legacy approach
+            if self.use_presentation_parsing:
+                statements = self._parse_with_presentation(viewer_data)
+            else:
+                statements = self._parse_statements(viewer_data)
 
             return ProcessingResult(
                 statements=statements,
@@ -127,6 +138,163 @@ class DataParser:
 
         # Fallback
         return data.get('meta', {}).get('formType', 'Unknown Form')
+
+    def _parse_with_presentation(self, viewer_data: Dict[str, Any]) -> List[Statement]:
+        """New presentation-based parsing method.
+
+        Args:
+            viewer_data: Complete viewer JSON structure from Arelle
+
+        Returns:
+            List of Statement objects using presentation structure
+        """
+        logger.info("Using presentation-based parsing")
+
+        try:
+            # Parse presentation structure
+            presentation_statements = self.presentation_parser.parse_presentation_statements(
+                viewer_data
+            )
+
+            if not presentation_statements:
+                logger.warning("No presentation statements found, falling back to legacy parsing")
+                return self._parse_statements(viewer_data)
+
+            # Extract periods and facts
+            periods = self._extract_periods_from_viewer_data(viewer_data)
+            facts = self._extract_facts_from_viewer_data(viewer_data)
+
+            if not periods:
+                logger.warning("No periods found in viewer data")
+                return []
+
+            if not facts:
+                logger.warning("No facts found in viewer data")
+                return []
+
+            # Match facts to presentation for each statement
+            statement_tables = []
+            for pres_statement in presentation_statements:
+                if self._is_primary_statement(pres_statement):
+                    try:
+                        table = self.fact_matcher.match_facts_to_statement(
+                            pres_statement, facts, periods
+                        )
+                        statement_tables.append(table)
+                        logger.info(f"Matched facts for: {pres_statement.statement_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to match facts for {pres_statement.statement_name}: {e}")
+                        continue
+
+            # Convert to existing Statement format for compatibility with Excel generator
+            statements = self._convert_statement_tables_to_legacy_format(statement_tables)
+
+            logger.info(f"Parsed {len(statements)} statements using presentation structure")
+            return statements
+
+        except Exception as e:
+            logger.error(f"Error in presentation-based parsing: {e}")
+            logger.info("Falling back to legacy parsing")
+            return self._parse_statements(viewer_data)
+
+    def _is_primary_statement(self, statement) -> bool:
+        """Check if this is a primary financial statement.
+
+        Args:
+            statement: PresentationStatement object
+
+        Returns:
+            True if this is a primary financial statement
+        """
+        primary_types = {
+            StatementType.BALANCE_SHEET,
+            StatementType.INCOME_STATEMENT,
+            StatementType.CASH_FLOWS,
+            StatementType.EQUITY
+        }
+        return statement.statement_type in primary_types
+
+    def _extract_periods_from_viewer_data(self, viewer_data: Dict[str, Any]) -> List[Period]:
+        """Extract periods from viewer data using fact matcher.
+
+        Args:
+            viewer_data: Complete viewer JSON structure
+
+        Returns:
+            List of Period objects found in facts
+        """
+        try:
+            # Get facts to extract periods from
+            facts = self._extract_facts_from_viewer_data(viewer_data)
+            if not facts:
+                return []
+
+            # Use fact matcher to extract periods
+            periods = self.fact_matcher.extract_periods_from_facts(facts)
+
+            logger.info(f"Extracted {len(periods)} periods from viewer data")
+            return periods
+
+        except Exception as e:
+            logger.error(f"Error extracting periods: {e}")
+            return []
+
+    def _extract_facts_from_viewer_data(self, viewer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract facts from viewer data.
+
+        Args:
+            viewer_data: Complete viewer JSON structure
+
+        Returns:
+            Facts dictionary from viewer data
+        """
+        try:
+            # Navigate to facts in sourceReports structure
+            target_report = viewer_data['sourceReports'][0]['targetReports'][0]
+            facts = target_report.get('facts', {})
+
+            logger.debug(f"Extracted {len(facts)} facts from viewer data")
+            return facts
+
+        except (KeyError, IndexError, TypeError) as e:
+            logger.error(f"Could not extract facts from viewer data: {e}")
+
+            # Try legacy format
+            legacy_facts = viewer_data.get('facts', {})
+            if legacy_facts:
+                logger.info(f"Found {len(legacy_facts)} facts in legacy format")
+                return legacy_facts
+
+            return {}
+
+    def _convert_statement_tables_to_legacy_format(self, tables: List) -> List[Statement]:
+        """Convert StatementTable objects to legacy Statement format.
+
+        Args:
+            tables: List of StatementTable objects
+
+        Returns:
+            List of legacy Statement objects
+        """
+        statements = []
+
+        for table in tables:
+            # Use the conversion method from StatementTable
+            legacy_statement = table.to_legacy_statement()
+
+            # Add presentation node references for Excel generator enhancement
+            for row in legacy_statement.rows:
+                # Find corresponding StatementRow to get presentation node
+                for stmt_row in table.rows:
+                    if (stmt_row.node.concept == row.concept and
+                        stmt_row.node.label == row.label):
+                        # Add reference to presentation node for Excel generator
+                        row.presentation_node = stmt_row.node
+                        break
+
+            statements.append(legacy_statement)
+
+        return statements
 
     def _parse_statements(self, data: Dict[str, Any]) -> List[Statement]:
         """Parse financial statements from viewer data."""
