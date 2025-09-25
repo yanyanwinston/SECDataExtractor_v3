@@ -75,11 +75,16 @@ class FactMatcher:
             rows=rows
         )
 
-    def extract_periods_from_facts(self, facts: dict) -> List[Period]:
+    def extract_periods_from_facts(
+        self,
+        facts: dict,
+        concept_filter: Optional[set] = None
+    ) -> List[Period]:
         """Extract reporting periods from facts data.
 
         Args:
             facts: Facts data from viewer JSON
+            concept_filter: Optional set of concept names to include
 
         Returns:
             List of unique periods found in facts
@@ -91,6 +96,10 @@ class FactMatcher:
             # Each fact can have multiple contexts (a, b, c, etc.)
             for context_key, context_data in fact_data.items():
                 if not isinstance(context_data, dict):
+                    continue
+
+                concept_name = context_data.get('c')
+                if concept_filter and concept_name not in concept_filter:
                     continue
 
                 period = context_data.get('p')

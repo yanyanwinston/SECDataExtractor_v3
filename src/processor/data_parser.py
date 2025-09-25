@@ -175,11 +175,6 @@ class DataParser:
         if not presentation_statements:
             raise ValueError("No presentation statements found in viewer data")
 
-        # Extract periods and facts
-        periods = self._extract_periods_from_viewer_data(viewer_data)
-        if not periods:
-            raise ValueError("No reporting periods found in viewer data")
-
         facts = self._extract_facts_from_viewer_data(viewer_data)
         if not facts:
             raise ValueError("No facts found in viewer data")
@@ -190,8 +185,27 @@ class DataParser:
 
         for pres_statement in presentation_statements:
             try:
+                concepts_for_statement = self._collect_concepts_from_statement(pres_statement)
+
+                periods_for_statement = self.fact_matcher.extract_periods_from_facts(
+                    facts,
+                    concept_filter=concepts_for_statement if concepts_for_statement else None
+                )
+
+                periods_for_statement = self._select_periods_for_statement(
+                    pres_statement,
+                    periods_for_statement
+                )
+
+                if not periods_for_statement:
+                    logger.debug(
+                        "Statement %s has no applicable periods; skipping",
+                        pres_statement.statement_name
+                    )
+                    continue
+
                 table = self.fact_matcher.match_facts_to_statement(
-                    pres_statement, facts, periods
+                    pres_statement, facts, periods_for_statement
                 )
 
                 if not self._statement_table_has_data(table):
@@ -279,6 +293,56 @@ class DataParser:
 
         filtered.sort(key=lambda stmt: stmt.sort_key())
         return filtered
+
+    def _collect_concepts_from_statement(
+        self,
+        statement: PresentationStatement
+    ) -> set:
+        """Gather concept names used in a single presentation statement."""
+        return {
+            node.concept
+            for node, _ in statement.get_all_nodes_flat()
+            if node.concept
+        }
+
+    def _collect_concepts_from_statements(
+        self,
+        statements: List[PresentationStatement]
+    ) -> set:
+        """Gather concept names across multiple statements."""
+        concepts = set()
+        for statement in statements:
+            concepts.update(self._collect_concepts_from_statement(statement))
+        return concepts
+
+    def _select_periods_for_statement(
+        self,
+        statement: PresentationStatement,
+        periods: List[Period]
+    ) -> List[Period]:
+        """Select appropriate periods for a specific statement."""
+        if not periods:
+            return []
+
+        sorted_periods = sorted(periods, key=lambda p: p.end_date, reverse=True)
+        instants = [p for p in sorted_periods if p.instant]
+        durations = [p for p in sorted_periods if not p.instant]
+
+        statement_type = statement.statement_type
+
+        if statement_type == StatementType.BALANCE_SHEET:
+            selected = instants[:2] or sorted_periods[:2]
+        elif statement_type in {
+            StatementType.INCOME_STATEMENT,
+            StatementType.CASH_FLOWS,
+            StatementType.COMPREHENSIVE_INCOME,
+            StatementType.EQUITY
+        }:
+            selected = durations[:3] or instants[:3] or sorted_periods[:3]
+        else:
+            selected = sorted_periods[:3]
+
+        return selected
 
     def _statement_table_has_data(self, table) -> bool:
         """Determine whether a matched statement table contains any facts."""

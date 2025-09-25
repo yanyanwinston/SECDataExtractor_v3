@@ -93,3 +93,24 @@ def test_data_parser_filters_by_group_type():
     parser_with_disclosures = DataParser(include_disclosures=True)
     filtered_inclusive = parser_with_disclosures._filter_presentation_statements([statement, disclosure])
     assert filtered_inclusive == [statement, disclosure]
+
+
+def test_selected_periods_align_with_statement_type(integration_viewer_data):
+    parser = DataParser(ValueFormatter(scale_millions=False))
+    result = parser.parse_viewer_data(integration_viewer_data)
+
+    assert result.success
+
+    for statement in result.statements:
+        name_upper = statement.name.upper()
+        period_count = len(statement.periods)
+        instants = [p for p in statement.periods if p.instant]
+
+        if "BALANCE" in name_upper:
+            assert period_count <= 2
+            assert len(instants) == period_count
+        elif "PARENTHE" in name_upper:
+            assert period_count <= 2
+        elif any(keyword in name_upper for keyword in ["OPERATIONS", "COMPREHENSIVE", "CASH", "REDEEMABLE"]):
+            assert 1 <= period_count <= 3
+            assert instants != statement.periods  # expect durations present when available
