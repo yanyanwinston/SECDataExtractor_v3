@@ -6,7 +6,7 @@ import json
 import re
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,11 @@ class ViewerDataExtractor:
     def __init__(self):
         pass
 
-    def extract_viewer_data(self, viewer_html_path: str) -> Dict[str, Any]:
+    def extract_viewer_data(
+        self,
+        viewer_html_path: str,
+        meta_links_candidates: Optional[List[Path]] = None
+    ) -> Dict[str, Any]:
         """
         Extract viewer JSON data from HTML file.
 
@@ -48,7 +52,10 @@ class ViewerDataExtractor:
                 raise ValueError("No viewer JSON data found in HTML file")
 
             # Attempt to load supplemental metadata (MetaLinks)
-            meta_links = self._load_meta_links(html_file)
+            meta_links = self._load_meta_links(
+                html_file,
+                extra_candidates=meta_links_candidates or []
+            )
             if meta_links:
                 json_data['meta_links'] = meta_links
 
@@ -115,22 +122,35 @@ class ViewerDataExtractor:
         # If no patterns worked, try a more aggressive approach
         return self._extract_json_aggressive(html_content)
 
-    def _load_meta_links(self, html_file: Path) -> Optional[Dict[str, Any]]:
-        """Load MetaLinks.json residing next to the viewer HTML if present."""
-        meta_path = html_file.with_name('MetaLinks.json')
+    def _load_meta_links(
+        self,
+        html_file: Path,
+        extra_candidates: List[Path]
+    ) -> Optional[Dict[str, Any]]:
+        """Load MetaLinks.json located near the viewer HTML or provided candidates."""
+        candidates = [html_file.with_name('MetaLinks.json')]
 
-        if not meta_path.exists():
-            return None
+        # Some viewers are generated into temp folders. Try parent directory as fallback.
+        if html_file.parent != html_file.parent.parent:
+            candidates.append(html_file.parent.parent / 'MetaLinks.json')
 
-        try:
-            with meta_path.open('r', encoding='utf-8') as fp:
-                return json.load(fp)
-        except Exception as exc:
-            logger.warning("Failed to parse MetaLinks.json: %s", exc)
-            return None
+        candidates.extend(extra_candidates)
 
-    def _build_role_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, Any]]]:
-        """Build role metadata map keyed by role URI.
+        for candidate in candidates:
+            if not candidate or not candidate.exists():
+                continue
+
+            try:
+                with candidate.open('r', encoding='utf-8') as fp:
+                    logger.debug("Loaded MetaLinks from %s", candidate)
+                    return json.load(fp)
+            except Exception as exc:
+                logger.warning("Failed to parse MetaLinks.json at %s: %s", candidate, exc)
+
+        return None
+
+    def _build_role_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, Dict[str, Any]]]]:
+        """Build role metadata map keyed by URI and long name for easy lookup.
 
         Args:
             meta_links: Parsed MetaLinks JSON data
@@ -153,7 +173,9 @@ class ViewerDataExtractor:
         if not isinstance(reports, dict):
             return None
 
-        role_map: Dict[str, Dict[str, Any]] = {}
+        by_uri: Dict[str, Dict[str, Any]] = {}
+        by_long_name: Dict[str, Dict[str, Any]] = {}
+        by_normalized_name: Dict[str, Dict[str, Any]] = {}
         for role_id, payload in reports.items():
             role_uri = payload.get('role')
             if not role_uri:
@@ -165,7 +187,7 @@ class ViewerDataExtractor:
             except (TypeError, ValueError):
                 order_value = None
 
-            role_map[role_uri] = {
+            normalized = {
                 'r_id': role_id,
                 'groupType': payload.get('groupType'),
                 'subGroupType': payload.get('subGroupType'),
@@ -174,8 +196,23 @@ class ViewerDataExtractor:
                 'order': order_value,
                 'isDefault': payload.get('isDefault'),
             }
+            by_uri[role_uri] = normalized
+            long_name = payload.get('longName')
+            if isinstance(long_name, str):
+                lower_name = long_name.lower()
+                by_long_name[lower_name] = normalized
+                if ' - ' in lower_name:
+                    _, _, tail = lower_name.partition(' - ')
+                    by_normalized_name[tail] = normalized
 
-        return role_map or None
+        if not (by_uri or by_long_name or by_normalized_name):
+            return None
+
+        return {
+            'by_uri': by_uri,
+            'by_long_name': by_long_name,
+            'by_normalized_name': by_normalized_name
+        }
 
     def _clean_json_string(self, json_str: str) -> str:
         """

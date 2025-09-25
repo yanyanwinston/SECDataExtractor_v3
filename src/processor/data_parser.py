@@ -253,12 +253,26 @@ class DataParser:
         if not any(getattr(stmt, 'group_type', None) for stmt in statements):
             return statements
 
-        allowed_groups = {'statement', 'document'}
+        allowed_groups = {'statement'}
+        primary_types = {
+            StatementType.BALANCE_SHEET,
+            StatementType.INCOME_STATEMENT,
+            StatementType.CASH_FLOWS,
+            StatementType.EQUITY,
+            StatementType.COMPREHENSIVE_INCOME,
+        }
 
-        filtered = [
-            stmt for stmt in statements
-            if (stmt.group_type or '').lower() in allowed_groups
-        ]
+        filtered = []
+        for stmt in statements:
+            group = (stmt.group_type or '').lower()
+            if group in allowed_groups:
+                filtered.append(stmt)
+            elif (
+                not group
+                and stmt.statement_type in primary_types
+                and not stmt.statement_name.lower().startswith('disclosure')
+            ):
+                filtered.append(stmt)
 
         if not filtered:
             return statements

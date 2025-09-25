@@ -147,9 +147,30 @@ class PresentationParser:
         if not root_nodes:
             raise ValueError(f"No valid presentation trees built for role {role_id}")
 
+        role_uri = role_def.get('uri')
+        if not role_uri:
+            elrs = role_data.get('elrs') or {}
+            if elrs:
+                role_uri = next(iter(elrs.keys()), None)
+
         metadata = None
         if role_metadata:
-            metadata = role_metadata.get(role_def.get('uri', ''))
+            if role_uri:
+                metadata = role_metadata.get('by_uri', {}).get(role_uri)
+
+            if not metadata:
+                label = (
+                    role_def.get('label')
+                    or role_def.get('en')
+                    or role_def.get('en-us')
+                    or ''
+                )
+                if label:
+                    label_lower = label.lower()
+                    metadata = role_metadata.get('by_long_name', {}).get(label_lower)
+                    if not metadata and ' - ' in label_lower:
+                        _, _, tail = label_lower.partition(' - ')
+                        metadata = role_metadata.get('by_normalized_name', {}).get(tail)
 
         # Extract statement name and classify type
         statement_name = metadata.get('longName') if metadata and metadata.get('longName') else self._extract_statement_name(
@@ -158,7 +179,7 @@ class PresentationParser:
         statement_type = classify_statement_type(statement_name)
 
         return PresentationStatement(
-            role_uri=role_def.get('uri', ''),
+            role_uri=role_uri or role_def.get('uri', '') or '',
             role_id=role_id,
             statement_name=statement_name,
             statement_type=statement_type,

@@ -245,6 +245,10 @@ def process_filing(args) -> None:
             raise ValueError("Filing source validation failed")
 
         filing_path = filing_source.get_path()
+        meta_links_candidates = []
+        original_meta_links = Path(filing_path).with_name('MetaLinks.json')
+        if original_meta_links.exists():
+            meta_links_candidates.append(original_meta_links)
 
         if not input_handler.validate_filing(filing_path):
             logger.warning("File does not appear to be a valid iXBRL filing")
@@ -267,7 +271,10 @@ def process_filing(args) -> None:
         # Step 3: JSON extraction
         logger.info("Step 3: Extracting viewer data...")
         json_extractor = ViewerDataExtractor()
-        viewer_data = json_extractor.extract_viewer_data(viewer_html_path)
+        viewer_data = json_extractor.extract_viewer_data(
+            viewer_html_path,
+            meta_links_candidates=meta_links_candidates
+        )
 
         if args.dump_role_map:
             _dump_role_map(viewer_data.get('role_map'), args.dump_role_map)
