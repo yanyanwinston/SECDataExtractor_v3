@@ -2,15 +2,51 @@
 
 ## Overview
 
-The SECDataExtractor_v3 follows a linear processing pipeline that transforms iXBRL filings into Excel format while preserving the original presentation structure.
+The SECDataExtractor_v3 consists of two main layers: a **Data Acquisition Layer** for downloading SEC filings, and a **Processing Pipeline** that transforms iXBRL filings into Excel format while preserving the original presentation structure.
+
+## Complete System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Data Acquisition Layer                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ SEC EDGAR Database → Download Module → Local File Storage              │
+│      ↓                    ↓                    ↓                       │
+│  Company Search     Filing Search      Downloaded iXBRL Files          │
+│  Filing Lists       Bulk Download      + Metadata                      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Processing Pipeline                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Local iXBRL → Arelle Processing → Viewer JSON → Data Models → Excel   │
+│     ↓              ↓                 ↓           ↓            ↓        │
+│ Input Handler  iXBRLViewerPlugin  Extraction   Transform    XLSX File  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Data Acquisition Layer
+
+The download module (`src/sec_downloader/`) provides SEC-compliant access to EDGAR filings:
+
+### Components
+- **EdgarClient**: Low-level EDGAR API communication with rate limiting
+- **FilingSearch**: High-level search interface with filters
+- **FilingDownload**: Multi-threaded download engine
+- **CLI Interface**: `download_filings.py` command-line tool
+
+### Workflow
+```
+Ticker/CIK → Company Lookup → Filing Search → Parallel Download → Local Storage
+    ↓              ↓              ↓               ↓                ↓
+  "AAPL"      Company Info    Filing List    Download Queue   downloads/AAPL/
+              CIK: 320193     10-K, 10-Q     + Progress       ├── 10-K_2023/
+                                                              └── 10-Q_2023/
+```
 
 ## Processing Pipeline
 
-```
-iXBRL Filing → Arelle Processing → Viewer JSON → Data Models → Excel Output
-     ↓              ↓                 ↓           ↓            ↓
-  SEC EDGAR     iXBRLViewerPlugin  Extraction   Transform    XLSX File
-```
+The core extraction pipeline processes downloaded or direct iXBRL files:
 
 ## Component Architecture
 
@@ -59,11 +95,29 @@ iXBRL Filing → Arelle Processing → Viewer JSON → Data Models → Excel Out
 ## Data Flow
 
 ### Step 1: Filing Input
+
+With the download module, there are now two primary workflows:
+
+#### Workflow A: Direct Processing (Original)
 ```
 Input Sources:
 ├── SEC EDGAR URL (https://sec.gov/...)
 ├── Local iXBRL file (.htm, .html)
 └── SEC filing ZIP archive
+```
+
+#### Workflow B: Download-then-Process (Recommended)
+```
+Download Phase:
+Ticker → Download Module → Local Files
+  ↓           ↓               ↓
+"AAPL"   Filing Search   downloads/AAPL/10-K_2023/filing.htm
+         Batch Download  downloads/AAPL/10-Q_2023/filing.htm
+
+Processing Phase:
+Downloaded Files → Input Handler → [Continue to Step 2]
+      ↓                ↓
+   Local iXBRL    File Validation
 ```
 
 ### Step 2: Arelle Processing

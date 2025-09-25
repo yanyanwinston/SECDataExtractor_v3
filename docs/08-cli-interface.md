@@ -2,9 +2,69 @@
 
 ## Overview
 
-The command-line interface provides user-friendly access to the SEC data extraction functionality. The main script `render_viewer_to_xlsx.py` accepts various options to control input sources, output formatting, and processing behavior.
+The command-line interface provides user-friendly access to the SEC data extraction functionality. The system consists of two main CLI tools:
 
-## Command Structure
+1. **`download_filings.py`** - Download SEC filings from EDGAR database
+2. **`render_viewer_to_xlsx.py`** - Process iXBRL filings into Excel format
+
+These can be used independently or in combination for a complete download-to-Excel workflow.
+
+## Integrated Workflow (Recommended)
+
+### Complete Download-to-Excel Process
+
+```bash
+# Step 1: Download SEC filing
+python download_filings.py --ticker AAPL --form 10-K --count 1
+
+# Step 2: Process downloaded filing to Excel
+python render_viewer_to_xlsx.py \
+  --filing downloads/AAPL/10-K_2023-09-30/aapl-20230930.htm \
+  --out apple-financials.xlsx
+```
+
+### One-Line Batch Processing
+```bash
+# Download and process in sequence
+python download_filings.py --ticker MSFT --form 10-K --count 1 && \
+python render_viewer_to_xlsx.py \
+  --filing downloads/MSFT/10-K_*/msft-*.htm \
+  --out msft-financials.xlsx
+```
+
+## Download Module (download_filings.py)
+
+### Basic Usage
+```bash
+python download_filings.py --ticker <TICKER> --form <FORM_TYPE>
+```
+
+### Common Examples
+```bash
+# Download latest 10-K
+python download_filings.py --ticker AAPL --form 10-K
+
+# Download multiple quarters
+python download_filings.py --ticker MSFT --form 10-Q --count 4
+
+# Download by date range
+python download_filings.py --ticker GOOGL --form 10-K \
+  --start-date 2020-01-01 --end-date 2023-12-31
+
+# Batch download from file
+python download_filings.py --input-file tickers.txt --form 10-K,10-Q
+```
+
+### Key Download Options
+- `--ticker` / `--cik` / `--input-file`: Company identifier or batch file
+- `--form`: Form types (10-K, 10-Q, etc.)
+- `--count`: Maximum filings per company
+- `--start-date` / `--end-date`: Date range filtering
+- `--output-dir`: Output directory (default: ./downloads)
+- `--max-parallel`: Concurrent downloads (default: 3)
+- `--include-amendments`: Include 10-K/A, 10-Q/A filings
+
+## Processing Module (render_viewer_to_xlsx.py)
 
 ### Basic Usage
 ```bash
@@ -495,23 +555,43 @@ python render_viewer_to_xlsx.py \
   --verbose
 ```
 
-### Batch Processing Script
+### Integration Examples
+
+#### Example 1: Downloaded Filing Processing
+```bash
+# After downloading with download_filings.py
+python render_viewer_to_xlsx.py \
+  --filing "downloads/AAPL/10-K_2023-09-30/aapl-20230930.htm" \
+  --out "apple-2023-financials.xlsx" \
+  --one-period
+```
+
+#### Example 2: Direct URL Processing (Original)
+```bash
+# Direct processing from SEC URL
+python render_viewer_to_xlsx.py \
+  --filing "https://www.sec.gov/Archives/edgar/data/320193/000032019324000007/aapl-20231230.htm" \
+  --out "apple-direct.xlsx"
+```
+
+#### Example 3: Batch Processing After Download
 ```bash
 #!/bin/bash
-# process_multiple.sh
+# Download multiple companies first
+python download_filings.py --input-file companies.txt --form 10-K
 
-FILINGS=(
-  "company1-10k.htm"
-  "company2-10k.htm"
-  "company3-10k.htm"
-)
-
-for filing in "${FILINGS[@]}"; do
-  echo "Processing $filing..."
-  python render_viewer_to_xlsx.py \
-    --filing "$filing" \
-    --out "${filing%.htm}.xlsx" \
-    --one-period
+# Process all downloaded filings
+for company_dir in downloads/*/; do
+    company=$(basename "$company_dir")
+    for filing in "$company_dir"10-K_*/*.htm; do
+        if [[ -f "$filing" ]]; then
+            echo "Processing $company filing..."
+            python render_viewer_to_xlsx.py \
+                --filing "$filing" \
+                --out "output/${company}-financials.xlsx" \
+                --verbose
+        fi
+    done
 done
 ```
 

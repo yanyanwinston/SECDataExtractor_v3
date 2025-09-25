@@ -10,15 +10,41 @@ Traditional SEC data extraction often results in Excel files that don't match th
 
 ## Solution Approach
 
+The SECDataExtractor_v3 provides a complete end-to-end solution:
+
+### Data Acquisition
+- **SEC Filing Downloader** - Automated download of 10-K and 10-Q filings from EDGAR
+- **Bulk Processing** - Download multiple companies and periods efficiently
+- **SEC Compliance** - Built-in rate limiting and proper API usage
+
+### Data Processing
 Instead of parsing raw XBRL data directly, we leverage Arelle's iXBRLViewerPlugin to:
 
 1. **Preserve original presentation** - Use the same rendering logic that creates the HTML viewer
 2. **Maintain exact order** - Keep rows and sections in their original sequence
 3. **Apply proper formatting** - Implement consistent number formatting suitable for Excel analysis
 
+### Complete Workflow
+```
+Ticker Symbol → Download Module → Local iXBRL Files → Processing Pipeline → Excel Output
+     ↓               ↓                 ↓                    ↓               ↓
+   "AAPL"      SEC EDGAR API     downloads/AAPL/      Arelle Viewer    financials.xlsx
+              Filing Search      10-K_2023.htm       JSON Extraction   (3 sheets)
+```
+
 ## Target Inputs
 
 ### Filing Sources
+
+The system supports both automated download and direct file processing:
+
+#### Automated Download (Recommended)
+- **Ticker symbols**: Download by stock ticker (e.g., AAPL, MSFT, GOOGL)
+- **CIK numbers**: Download by Central Index Key
+- **Batch files**: Process multiple companies from text file
+- **Date filtering**: Specify date ranges for filing searches
+
+#### Direct File Processing
 - **URL**: Direct link to an iXBRL filing on SEC EDGAR
 - **Local path**: Downloaded iXBRL filing (single HTML file)
 - **ZIP archive**: SEC "filing-documents" zip containing multiple files

@@ -98,42 +98,51 @@ python render_viewer_to_xlsx.py --filing <SOURCE> --out <OUTPUT_FILE>
 - `--verbose` - Detailed logging
 - `--timeout` - Arelle processing timeout
 
-## Development Guidelines
+## Development Philosophy: MVP First
 
-### Code Organization
-- Follow the linear processing pipeline architecture
-- Implement proper error handling for each processing stage
-- Use defensive programming for JSON parsing (viewer format may vary)
-- Maintain separation between data models and presentation logic
+### IMPORTANT: Avoid Overengineering
+- **Build minimal working solutions first** - Don't create complex architectures upfront
+- **One feature at a time** - Implement the simplest version that works
+- **Avoid premature optimization** - Make it work, then make it better
+- **No unnecessary abstractions** - Use simple functions before creating classes
+- **Prefer simple over clever** - Code should be readable and straightforward
 
-### Testing Requirements
-- **Visual fidelity tests** - Row labels and order match iXBRL viewer
-- **Data accuracy tests** - Values match after display scaling
-- **Format validation** - Currency, EPS, and share formatting correctness
-- **Edge case handling** - Missing data, non-USD currency, large filings
+### MVP Development Approach
+1. **Start with basic functionality** - Get core feature working first
+2. **Use existing tools** - Leverage libraries instead of building from scratch
+3. **Simple error handling** - Basic try/catch, not complex error hierarchies
+4. **Direct solutions** - Don't create layers of abstraction unnecessarily
+5. **Hardcode first, parameterize later** - Make it work with simple values first
 
-### Performance Considerations
-- **Arelle processing** - Typically 30-60 seconds for large filings
-- **Memory management** - Stream processing for large JSON files
-- **Temporary file cleanup** - Automatic cleanup unless --keep-temp specified
+### Code Organization (Keep Simple)
+- **Single-file solutions when possible** - Don't split unnecessarily
+- **Basic error handling** - Simple try/catch blocks, not complex error systems
+- **Straightforward functions** - Do one thing, return result, handle errors
+- **Minimal configuration** - Hardcode reasonable defaults, add options later
+
+### When to Add Complexity
+Only add complexity when you have a **concrete, immediate need**:
+- ✅ User asks for specific feature
+- ✅ Current approach is actually failing
+- ✅ Real performance problem with measurable impact
+- ❌ "Future flexibility" or "better architecture"
+- ❌ "Best practices" without specific benefit
+- ❌ "What if" scenarios
 
 ## Current Implementation Status
 
-Based on the documentation review, the project has:
-- ✅ Complete technical specification (SPEC.md)
-- ✅ Comprehensive documentation suite (9 detailed files)
-- ❌ No implementation code yet
-- ❌ No package configuration (requirements.txt, setup.py)
-- ❌ No test files
+The project has:
+- ✅ Download module - Complete SEC filing downloader
+- ✅ Virtual environment setup
+- ✅ Requirements file with dependencies
+- ❌ Main processing pipeline (render_viewer_to_xlsx.py)
 
-## Development Priorities
+## Development Priorities (MVP Focus)
 
-1. **Core Implementation** - Build the main processing pipeline
-2. **CLI Interface** - Implement render_viewer_to_xlsx.py
-3. **Data Models** - Create Statement, Row, Period, Cell classes
-4. **Value Formatting** - Implement currency and number formatting rules
-5. **Excel Generation** - Build openpyxl-based output generation
-6. **Testing Suite** - Implement comprehensive test coverage
+1. **Make download_filings.py work perfectly** - Focus on one thing first
+2. **Build basic render_viewer_to_xlsx.py** - Minimal working version
+3. **Test with real data** - Use actual filings, fix what breaks
+4. **Add features only when requested** - Don't build "nice to have" features
 
 ## Development Environment
 
