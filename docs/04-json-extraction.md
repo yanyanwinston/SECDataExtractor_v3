@@ -4,10 +4,69 @@
 
 The Arelle iXBRLViewerPlugin generates an HTML file with embedded JavaScript containing all the financial statement data in JSON format. This component extracts and parses that JSON data for further processing.
 
-## HTML Structure Analysis
+**Note**: Arelle has two different JSON formats depending on the version:
+- **Legacy Format** (older versions): Direct `window.ixv` with `statements`, `facts`, `periods`
+- **New Format** (Arelle 2.37+): `sourceReports` structure with compressed fact encoding
+
+## New Format (Arelle 2.37+) - Primary Format
+
+### JSON Structure
+```json
+{
+  "sourceReports": [
+    {
+      "targetReports": [
+        {
+          "facts": {
+            "f-123": {
+              "a": {
+                "c": "us-gaap:Assets",
+                "e": "entity-id",
+                "m": "usd",
+                "p": "period-id",
+                "v": 1000000000,
+                "d": -6
+              }
+            }
+          },
+          "concepts": {},
+          "target": {...}
+        }
+      ]
+    }
+  ],
+  "features": [...],
+  "prefixes": {...},
+  "roles": {
+    "std": "http://www.xbrl.org/2003/role/label",
+    "doc": "http://www.xbrl.org/2003/role/documentation"
+  }
+}
+```
+
+### Fact Structure Decoding
+Each fact in the new format uses compressed keys:
+- `c`: Concept name (e.g., "us-gaap:Assets")
+- `e`: Entity identifier
+- `m`: Measure/unit (e.g., "usd")
+- `p`: Period identifier
+- `v`: Value (numeric)
+- `d`: Decimals (for scaling)
+
+### Extraction Pattern
+```javascript
+// Look for sourceReports JSON in script tags
+const patterns = [
+  '{\n "sourceReports"',
+  '{"sourceReports"',
+  // Large JSON objects starting with sourceReports
+];
+```
+
+## Legacy Format (Older Versions) - For Reference
 
 ### Generated HTML Pattern
-The iXBRL viewer HTML contains a script tag with the viewer data:
+The older iXBRL viewer HTML contains a script tag with the viewer data:
 
 ```html
 <script type="text/javascript">
@@ -277,6 +336,31 @@ def handle_missing_script(html_content: str) -> dict:
 
     raise ValueError("No viewer data found in HTML file")
 ```
+
+## Implementation Notes
+
+### Current Implementation
+Our `ViewerDataExtractor` class handles both formats automatically:
+
+```python
+from src.processor.json_extractor import ViewerDataExtractor
+
+extractor = ViewerDataExtractor()
+data = extractor.extract_viewer_data('path/to/ixbrl-viewer.htm')
+
+# The parser automatically detects format:
+if 'sourceReports' in data:
+    # New format - will be parsed by DataParser._parse_source_reports_format()
+    print("New Arelle format detected")
+else:
+    # Legacy format - will be parsed by DataParser._parse_legacy_format()
+    print("Legacy format detected")
+```
+
+### Format Detection
+The system automatically detects the format and routes to appropriate parsers:
+- **New Format**: Uses fact decoding and statement reconstruction
+- **Legacy Format**: Uses role-based statement parsing
 
 ## Complete Extraction Function
 

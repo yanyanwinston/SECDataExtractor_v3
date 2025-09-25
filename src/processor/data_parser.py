@@ -132,7 +132,51 @@ class DataParser:
         """Parse financial statements from viewer data."""
         statements = []
 
-        # Get role-based statements (common structure for iXBRL viewers)
+        # Handle new sourceReports format (Arelle 2.37+)
+        if 'sourceReports' in data:
+            logger.info("Processing new Arelle sourceReports format")
+            statements = self._parse_source_reports_format(data)
+        else:
+            # Handle older format with direct roles
+            logger.info("Processing legacy role-based format")
+            statements = self._parse_legacy_format(data)
+
+        return statements
+
+    def _parse_source_reports_format(self, data: Dict[str, Any]) -> List[Statement]:
+        """Parse the new sourceReports format from Arelle 2.37+"""
+        statements = []
+
+        source_reports = data.get('sourceReports', [])
+        if not source_reports:
+            return statements
+
+        # Get the target report data
+        first_report = source_reports[0]
+        target_reports = first_report.get('targetReports', [])
+        if not target_reports:
+            return statements
+
+        target_data = target_reports[0]
+        facts = target_data.get('facts', {})
+
+        logger.info(f"Found {len(facts)} facts in sourceReports format")
+
+        if not facts:
+            return statements
+
+        # Decode facts and group by statement type
+        decoded_facts = self._decode_facts(facts)
+        periods = self._extract_periods_from_facts(decoded_facts)
+
+        # Build statements from grouped facts
+        statements = self._build_statements_from_facts(decoded_facts, periods)
+
+        return statements
+
+    def _parse_legacy_format(self, data: Dict[str, Any]) -> List[Statement]:
+        """Parse the legacy format with direct roles"""
+        statements = []
         roles = data.get('roles', {})
 
         for role_id, role_data in roles.items():
@@ -334,6 +378,195 @@ class DataParser:
             return context_period['endDate'] == period.end_date
 
         return False
+
+    def _decode_facts(self, facts: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Decode compressed facts from new Arelle format"""
+        decoded_facts = []
+
+        for fact_id, fact_data in facts.items():
+            for concept_key, concept_data in fact_data.items():
+                if isinstance(concept_data, dict):
+                    decoded_fact = {
+                        'fact_id': fact_id,
+                        'concept_key': concept_key,
+                        'concept': concept_data.get('c', ''),  # concept name
+                        'entity': concept_data.get('e', ''),   # entity
+                        'measure': concept_data.get('m', ''),  # measure/unit
+                        'period': concept_data.get('p', ''),   # period
+                        'value': concept_data.get('v'),        # value
+                        'decimals': concept_data.get('d'),     # decimals
+                        'raw_data': concept_data
+                    }
+                    decoded_facts.append(decoded_fact)
+
+        logger.debug(f"Decoded {len(decoded_facts)} facts")
+        return decoded_facts
+
+    def _extract_periods_from_facts(self, decoded_facts: List[Dict[str, Any]]) -> List[Period]:
+        """Extract unique periods from decoded facts"""
+        period_map = {}
+
+        for fact in decoded_facts:
+            period_id = fact['period']
+            if period_id and period_id not in period_map:
+                # Create period based on period ID pattern
+                # This is simplified - real implementation might need more context
+                period_map[period_id] = Period(
+                    label=f"Period {period_id}",
+                    end_date=period_id,
+                    instant=True  # Simplified assumption
+                )
+
+        periods = list(period_map.values())
+        logger.debug(f"Found {len(periods)} unique periods")
+        return periods
+
+    def _build_statements_from_facts(self, decoded_facts: List[Dict[str, Any]],
+                                   periods: List[Period]) -> List[Statement]:
+        """Build financial statements from decoded facts"""
+        statements = []
+
+        # Group facts by statement type based on concept names
+        statement_groups = self._group_facts_by_statement_type(decoded_facts)
+
+        for stmt_type, stmt_facts in statement_groups.items():
+            if not stmt_facts:
+                continue
+
+            # Create statement
+            statement_name = self._get_statement_name(stmt_type)
+            short_name = self._get_short_name(statement_name)
+
+            # Build rows from facts
+            rows = self._build_rows_from_facts(stmt_facts, periods)
+
+            if rows:
+                statement = Statement(
+                    name=statement_name,
+                    short_name=short_name,
+                    periods=periods,
+                    rows=rows
+                )
+                statements.append(statement)
+
+        logger.info(f"Built {len(statements)} statements from facts")
+        return statements
+
+    def _group_facts_by_statement_type(self, decoded_facts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Group facts by financial statement type"""
+        groups = {
+            'balance_sheet': [],
+            'income_statement': [],
+            'cash_flows': [],
+            'equity': [],
+            'other': []
+        }
+
+        for fact in decoded_facts:
+            concept = fact['concept'].lower()
+
+            if any(term in concept for term in ['asset', 'liability', 'equity', 'stockholder']):
+                groups['balance_sheet'].append(fact)
+            elif any(term in concept for term in ['revenue', 'income', 'expense', 'cost', 'loss', 'gain']):
+                groups['income_statement'].append(fact)
+            elif any(term in concept for term in ['cash', 'financing', 'investing', 'operating']):
+                groups['cash_flows'].append(fact)
+            elif 'equity' in concept or 'stockholder' in concept:
+                groups['equity'].append(fact)
+            else:
+                groups['other'].append(fact)
+
+        # Remove empty groups
+        return {k: v for k, v in groups.items() if v}
+
+    def _get_statement_name(self, stmt_type: str) -> str:
+        """Get full statement name from type"""
+        names = {
+            'balance_sheet': 'Consolidated Balance Sheets',
+            'income_statement': 'Consolidated Statements of Operations',
+            'cash_flows': 'Consolidated Statements of Cash Flows',
+            'equity': 'Consolidated Statements of Stockholders Equity',
+            'other': 'Other Financial Data'
+        }
+        return names.get(stmt_type, 'Financial Statement')
+
+    def _build_rows_from_facts(self, facts: List[Dict[str, Any]], periods: List[Period]) -> List[Row]:
+        """Build statement rows from facts"""
+        rows = []
+
+        # Group facts by concept to create rows
+        concept_groups = {}
+        for fact in facts:
+            concept = fact['concept']
+            if concept not in concept_groups:
+                concept_groups[concept] = []
+            concept_groups[concept].append(fact)
+
+        # Create rows
+        for concept, concept_facts in concept_groups.items():
+            # Get label from first fact or use concept name
+            first_fact = concept_facts[0]
+            label = self._get_concept_label(concept)
+
+            # Build cells for each period
+            cells = {}
+            for period in periods:
+                # Find fact for this period
+                period_fact = None
+                for fact in concept_facts:
+                    if fact['period'] == period.end_date:
+                        period_fact = fact
+                        break
+
+                if period_fact and period_fact['value'] is not None:
+                    formatted_value = self.formatter.format_cell_value(
+                        period_fact['value'],
+                        period_fact['measure'],
+                        period_fact['decimals'],
+                        concept
+                    )
+
+                    cell = Cell(
+                        value=formatted_value,
+                        raw_value=period_fact['value'],
+                        unit=period_fact['measure'],
+                        decimals=period_fact['decimals'],
+                        period=period.label
+                    )
+                else:
+                    cell = Cell(
+                        value="—",
+                        raw_value=None,
+                        unit=None,
+                        decimals=None,
+                        period=period.label
+                    )
+
+                cells[period.label] = cell
+
+            row = Row(
+                label=label,
+                concept=concept,
+                is_abstract=False,  # Simplified
+                depth=0,  # Simplified
+                cells=cells
+            )
+            rows.append(row)
+
+        return rows
+
+    def _get_concept_label(self, concept: str) -> str:
+        """Get human-readable label from concept name"""
+        # Clean up concept name for display
+        if ':' in concept:
+            concept = concept.split(':')[-1]
+
+        # Convert camelCase to Title Case
+        import re
+        label = re.sub(r'([a-z])([A-Z])', r'\1 \2', concept)
+        label = label.replace('_', ' ').title()
+
+        return self.formatter.clean_label(label)
 
     def _parse_alternative_structure(self, data: Dict[str, Any]) -> List[Statement]:
         """Fallback parsing for alternative data structures."""
