@@ -1,37 +1,38 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `src/sec_downloader/` hosts EDGAR clients, retry helpers, and download models; keep network code there.
-- `src/processor/` provides presentation parsing, Arelle adapters, and Excel generation utilities.
-- Root scripts (`download_filings.py`, `render_viewer_to_xlsx.py`) orchestrate full runs; add new executables beside them.
-- Documentation lives in `docs/` and `SPEC.md`; fixtures in `tests/fixtures/`; generated data stays in `downloads/`, `output/`, and `temp/`.
+## Architecture Snapshot
+- Pipeline: filing → Arelle viewer plugin → viewer JSON → presentation models → Excel.
+- Lean on `arelle-release`, `ixbrl-viewer`, and `openpyxl`; consume the viewer JSON directly instead of rebuilding statements from facts.
+- Follow the MVP discipline in `CLAUDE.md`: solve the immediate problem first, then refine.
 
-## Build, Test, and Development Commands
-- `./setup.sh` builds the virtualenv, installs `requirements.txt`, and prepares working directories.
-- `source venv/bin/activate && pip install -r requirements.txt` keeps dependencies current during iterative work.
-- `python download_filings.py --ticker AAPL --form 10-K --count 1` downloads sample filings.
-- `python render_viewer_to_xlsx.py --filing downloads/.../viewer.json --out output/sample.xlsx` validates processing end-to-end.
-- `pytest` runs the suite; use `pytest tests/test_presentation_models.py -k row` for focused cases.
+## Project Structure & Ownership
+- `src/sec_downloader/` owns EDGAR networking; `src/processor/` owns presentation parsing, fact matching, and Excel output.
+- CLI entry points live at the repo root (`download_filings.py`, `render_viewer_to_xlsx.py`); keep new tools beside them.
+- Long-form docs are under `docs/` (see `11-refactor-spec-v3.1.md`), fixtures under `tests/fixtures/`, and scratch results in `downloads/`, `output/`, and `temp/`.
 
-## Coding Style & Naming Conventions
-- Follow PEP 8 with four-space indentation; prefer `snake_case` names and `PascalCase` dataclasses or enums.
-- Preserve type hints and short docstrings, mirroring patterns in `src/processor/presentation_models.py`.
-- Format with `black .`; lint via `flake8 src tests`; run `mypy src` when types change.
-- Mirror filename patterns (`*_processor.py`, `*_parser.py`, `*_generator.py`) so modules surface their role.
+## Build & Run Essentials
+- `./setup.sh` creates the venv, installs dependencies, and scaffolds working directories.
+- Activate with `source venv/bin/activate`; rerun `pip install -r requirements.txt` after dependency edits.
+- Fetch a sample filing via `python download_filings.py --ticker AAPL --form 10-K --count 1`.
+- Validate the pipeline with `python render_viewer_to_xlsx.py --filing downloads/<ticker>/<viewer>.json --out output/sample.xlsx`.
+- Test with `PYTHONPATH=. pytest`; narrow scope using `-k` filters when iterating.
 
-## Testing Guidelines
-- Build pytest modules under `tests/` using `test_<feature>.py` names and descriptive function titles.
-- Share samples through `tests/fixtures/viewer_schema_samples.json`; update fixtures instead of inlining payloads.
-- Add regression tests whenever parser logic, Excel layout, or downloader behavior shifts.
-- Aim to leave coverage steady or higher; capture new failure modes with targeted parametrized tests.
+## Coding Style & Conventions
+- PEP 8, four-space indentation, rich type hints; dataclasses/enums stay `PascalCase`, everything else `snake_case`.
+- Keep helpers lightweight and purposeful—only add layers when the current path fails a concrete need.
+- Format with `black .`, lint via `flake8 src tests`, and run `mypy src` when typing surfaces new contracts.
 
-## Commit & Pull Request Guidelines
-- Use `type(scope): summary` commit subjects (e.g., `feat(refactor): integrate presentation parser`) in imperative mood.
-- Keep subject lines ≤72 characters and elaborate in the body when necessary.
-- PRs should state context, approach, and validation; attach viewer JSON snippets or workbook diffs when helpful.
-- Run `pytest`, `black`, `flake8`, and relevant scripts locally before requesting review.
+## Testing & Validation
+- Mirror existing layout: `tests/test_<area>.py` plus shared payloads in `tests/fixtures/viewer_schema_samples.json`.
+- Extend regression coverage whenever presentation traversal, fact matching, or Excel layout changes; prefer parametrized cases.
+- `test_processor.py` remains a skipped manual harness—rely on the automated suite for CI.
 
-## Security & Configuration Tips
-- Do not commit secrets or raw filings; `downloads/`, `output/`, and `temp/` are git-ignored scratch directories.
-- Manage Arelle and iXBRL versions through `requirements.txt`; document upgrades in `docs/` and adjust `setup.sh` if flags change.
-- Surface any new environment variables in documentation and provide safe defaults in automation scripts.
+## Workflow & PRs
+- Commit subjects follow `type(scope): summary` (e.g., `feat(refactor): align fact matcher`), ≤72 chars, imperative mood.
+- PRs outline context, approach, and validation commands; attach viewer JSON snippets or Excel diffs when clarifying impact.
+- Before review, run `PYTHONPATH=. pytest`, `black`, `flake8`, plus anything specific to changed modules, and document config shifts in `docs/` or CLI help.
+
+## Current Refactor Status (v3.1)
+- Phases 1 and 2 (viewer JSON analysis and presentation data models) shipped earlier in the cycle.
+- Phase 3.1 (presentation parser) and Phase 3.2 (fact matcher) now consume viewer order, preferred labels, and sorted periods.
+- Next focus: Phase 3.3 integration into `DataParser`, followed by Excel generator updates (Phase 4+) to close the presentation-first pipeline.
