@@ -1,0 +1,339 @@
+{
+  "role_definitions": {
+    "description": "Sample role definitions mapping IDs to statement names",
+    "data": {
+      "ns9": {
+        "en": "0000005 - Statement - CONSOLIDATED BALANCE SHEETS"
+      },
+      "ns10": {
+        "en": "0000006 - Statement - CONSOLIDATED BALANCE SHEETS (Parenthetical)"
+      },
+      "ns11": {
+        "en": "0000008 - Statement - CONSOLIDATED STATEMENTS OF CASH FLOWS"
+      },
+      "ns12": {
+        "en": "0000004 - Statement - CONSOLIDATED STATEMENTS OF COMPREHENSIVE INCOME"
+      },
+      "ns13": {
+        "en": "0000003 - Statement - CONSOLIDATED STATEMENTS OF OPERATIONS"
+      },
+      "ns14": {
+        "en": "0000007 - Statement - CONSOLIDATED STATEMENTS OF SHAREHOLDERS' EQUITY"
+      }
+    }
+  },
+  "presentation_relationships": {
+    "description": "Sample presentation tree for Balance Sheet (ns9)",
+    "data": {
+      "role_id": "ns9",
+      "role_name": "Balance Sheet",
+      "relationships": {
+        "us-gaap:StatementOfFinancialPositionAbstract": [
+          {
+            "t": "us-gaap:AssetsAbstract"
+          },
+          {
+            "t": "us-gaap:LiabilitiesAndStockholdersEquityAbstract"
+          }
+        ],
+        "us-gaap:AssetsAbstract": [
+          {
+            "t": "us-gaap:AssetsCurrentAbstract"
+          },
+          {
+            "t": "us-gaap:AssetsNoncurrentAbstract"
+          },
+          {
+            "t": "us-gaap:Assets"
+          }
+        ],
+        "us-gaap:AssetsCurrentAbstract": [
+          {
+            "t": "us-gaap:CashAndCashEquivalentsAtCarryingValue"
+          },
+          {
+            "t": "us-gaap:MarketableSecuritiesCurrent"
+          },
+          {
+            "t": "us-gaap:AccountsReceivableNetCurrent"
+          },
+          {
+            "t": "us-gaap:NontradeReceivablesCurrent"
+          },
+          {
+            "t": "us-gaap:InventoryNet"
+          },
+          {
+            "t": "us-gaap:OtherAssetsCurrent"
+          },
+          {
+            "t": "us-gaap:AssetsCurrent"
+          }
+        ],
+        "us-gaap:AssetsNoncurrentAbstract": [
+          {
+            "t": "us-gaap:MarketableSecuritiesNoncurrent"
+          },
+          {
+            "t": "us-gaap:PropertyPlantAndEquipmentNet"
+          },
+          {
+            "t": "us-gaap:OtherAssetsNoncurrent"
+          },
+          {
+            "t": "us-gaap:AssetsNoncurrent"
+          }
+        ],
+        "us-gaap:LiabilitiesAndStockholdersEquityAbstract": [
+          {
+            "t": "us-gaap:LiabilitiesCurrentAbstract"
+          },
+          {
+            "t": "us-gaap:LiabilitiesNoncurrentAbstract"
+          },
+          {
+            "t": "us-gaap:Liabilities"
+          },
+          {
+            "t": "us-gaap:CommitmentsAndContingencies"
+          },
+          {
+            "t": "us-gaap:CommonStockSharesOutstanding"
+          },
+          {
+            "t": "us-gaap:CommonStockSharesIssued"
+          },
+          {
+            "t": "us-gaap:StockholdersEquityAbstract"
+          },
+          {
+            "t": "us-gaap:LiabilitiesAndStockholdersEquity"
+          }
+        ],
+        "us-gaap:LiabilitiesCurrentAbstract": [
+          {
+            "t": "us-gaap:AccountsPayableCurrent"
+          },
+          {
+            "t": "us-gaap:OtherLiabilitiesCurrent"
+          },
+          {
+            "t": "us-gaap:ContractWithCustomerLiabilityCurrent"
+          },
+          {
+            "t": "us-gaap:CommercialPaper"
+          },
+          {
+            "t": "us-gaap:LongTermDebtCurrent"
+          },
+          {
+            "t": "us-gaap:LiabilitiesCurrent"
+          }
+        ],
+        "us-gaap:LiabilitiesNoncurrentAbstract": [
+          {
+            "t": "us-gaap:LongTermDebtNoncurrent"
+          },
+          {
+            "t": "us-gaap:OtherLiabilitiesNoncurrent"
+          },
+          {
+            "t": "us-gaap:LiabilitiesNoncurrent"
+          }
+        ],
+        "us-gaap:StockholdersEquityAbstract": [
+          {
+            "t": "us-gaap:CommonStocksIncludingAdditionalPaidInCapital"
+          },
+          {
+            "t": "us-gaap:RetainedEarningsAccumulatedDeficit"
+          },
+          {
+            "t": "us-gaap:AccumulatedOtherComprehensiveIncomeLossNetOfTax"
+          },
+          {
+            "t": "us-gaap:StockholdersEquity"
+          }
+        ]
+      }
+    }
+  },
+  "sample_facts": {
+    "description": "Sample facts with different data types",
+    "data": {
+      "f-59": {
+        "a": {
+          "c": "dei:AmendmentFlag",
+          "e": "e:0000320193",
+          "m": false,
+          "p": "2022-09-25/2023-10-01"
+        },
+        "v": "false"
+      },
+      "f-60": {
+        "a": {
+          "c": "dei:DocumentFiscalYearFocus",
+          "e": "e:0000320193",
+          "m": false,
+          "p": "2022-09-25/2023-10-01"
+        },
+        "v": "2023"
+      },
+      "f-61": {
+        "a": {
+          "c": "dei:DocumentFiscalPeriodFocus",
+          "e": "e:0000320193",
+          "m": false,
+          "p": "2022-09-25/2023-10-01"
+        },
+        "v": "FY"
+      },
+      "f-62": {
+        "a": {
+          "c": "dei:EntityCentralIndexKey",
+          "e": "e:0000320193",
+          "m": false,
+          "p": "2022-09-25/2023-10-01"
+        },
+        "v": "0000320193"
+      },
+      "f-397": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionPeriod1",
+          "e": "e:0000320193",
+          "m": false,
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2023-10-01",
+          "p": "2023-10-01"
+        },
+        "v": "P1Y"
+      },
+      "f-398": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationPercentage",
+          "e": "e:0000320193",
+          "m": false,
+          "u": "xbrli:pure",
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2023-10-01",
+          "p": "2023-10-01"
+        },
+        "v": "0.67",
+        "d": 2
+      },
+      "f-399": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionPeriod1",
+          "e": "e:0000320193",
+          "m": false,
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2024-09-29",
+          "p": "2023-10-01"
+        },
+        "v": "P1Y"
+      },
+      "f-400": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationPercentage",
+          "e": "e:0000320193",
+          "m": false,
+          "u": "xbrli:pure",
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2024-09-29",
+          "p": "2023-10-01"
+        },
+        "v": "0.25",
+        "d": 2
+      },
+      "f-401": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionPeriod1",
+          "e": "e:0000320193",
+          "m": false,
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2025-09-28",
+          "p": "2023-10-01"
+        },
+        "v": "P1Y"
+      },
+      "f-402": {
+        "a": {
+          "c": "us-gaap:RevenueRemainingPerformanceObligationPercentage",
+          "e": "e:0000320193",
+          "m": false,
+          "u": "xbrli:pure",
+          "us-gaap:RevenueRemainingPerformanceObligationExpectedTimingOfSatisfactionStartDateAxis": "2025-09-28",
+          "p": "2023-10-01"
+        },
+        "v": "0.07",
+        "d": 2
+      }
+    }
+  },
+  "sample_concepts": {
+    "description": "Sample concept definitions with labels",
+    "data": {
+      "us-gaap:CashAndCashEquivalentsAtCarryingValue": {
+        "labels": {
+          "ns0": {
+            "en-us": "Cash and cash equivalents"
+          },
+          "ns1": {
+            "en-us": "Cash and Cash Equivalents"
+          },
+          "std": {
+            "en-us": "Cash and Cash Equivalents, at Carrying Value"
+          }
+        },
+        "b": "debit",
+        "dt": "xbrli:monetaryItemType"
+      },
+      "us-gaap:AssetsAbstract": {
+        "labels": {
+          "ns0": {
+            "en-us": "ASSETS:"
+          },
+          "std": {
+            "en-us": "Assets [Abstract]"
+          }
+        },
+        "dt": "xbrli:stringItemType"
+      },
+      "us-gaap:CommonStockSharesOutstanding": {
+        "labels": {
+          "ns0": {
+            "en-us": "Common stock, shares outstanding (in shares)"
+          },
+          "ns5": {
+            "en-us": "Common stock outstanding, beginning balances (in shares)"
+          },
+          "ns6": {
+            "en-us": "Common stock outstanding, ending balances (in shares)"
+          },
+          "std": {
+            "en-us": "Common Stock, Shares, Outstanding"
+          }
+        },
+        "dt": "xbrli:sharesItemType"
+      },
+      "dei:AmendmentFlag": {
+        "labels": {
+          "ns0": {
+            "en-us": "Amendment Flag"
+          },
+          "std": {
+            "en-us": "Amendment Flag"
+          }
+        },
+        "dt": "xbrli:booleanItemType"
+      },
+      "us-gaap:Assets": {
+        "labels": {
+          "ns3": {
+            "en-us": "Total assets"
+          },
+          "std": {
+            "en-us": "Assets"
+          }
+        },
+        "b": "debit",
+        "dt": "xbrli:monetaryItemType"
+      }
+    }
+  }
+}
