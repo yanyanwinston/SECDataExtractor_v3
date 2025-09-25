@@ -49,6 +49,8 @@ class ArelleProcessor:
         if not filing_path.exists():
             raise ArelleError(f"Filing file not found: {filing_path}")
 
+        filing_path = filing_path.resolve()
+
         # Create output directory
         output_dir = self.temp_dir / f"arelle_output_{hash(str(filing_path)) % 10000}"
         output_dir.mkdir(exist_ok=True)

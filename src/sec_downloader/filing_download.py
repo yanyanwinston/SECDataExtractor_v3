@@ -285,18 +285,40 @@ class FilingDownload:
         """
         filename_lower = filename.lower()
 
-        # Common exhibit patterns
-        exhibit_patterns = [
+        # Keep core inline XBRL resources even though they share exhibit-style extensions
+        essential_names = {
+            'filingsummary.xml',
+            'metalink.json',  # legacy typo seen in some filings
+            'metalinks.json'
+        }
+
+        if any(filename_lower.endswith(suffix) for suffix in (
+            '_pre.xml', '_cal.xml', '_lab.xml', '_def.xml', '.xsd'
+        )):
+            return False
+
+        if filename_lower in essential_names:
+            return False
+
+        # Common exhibit patterns we want to skip by default
+        exhibit_markers = (
             'ex-',
             'exhibit',
             'exh',
-            '.xsd',
-            '.xml',
-            'cover',
-            'graphic'
-        ]
+        )
 
-        return any(pattern in filename_lower for pattern in exhibit_patterns)
+        if any(marker in filename_lower for marker in exhibit_markers):
+            return True
+
+        # Cover pages/graphics frequently ship as separate attachments we do not need
+        graphic_suffixes = ('.jpg', '.jpeg', '.png', '.gif', '.svg', '.tif', '.tiff')
+        if filename_lower.endswith(graphic_suffixes):
+            return True
+
+        if 'cover' in filename_lower and filename_lower.endswith('.htm'):
+            return True
+
+        return False
 
     def _save_filing_metadata(
         self,

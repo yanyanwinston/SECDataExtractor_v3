@@ -51,15 +51,41 @@ class Filing:
         """Return CIK padded to 10 digits."""
         return self.cik.zfill(10)
 
+    def _ensure_accession_number(self) -> str:
+        """Ensure accession_number is populated, deriving it when possible."""
+        if self.accession_number:
+            return self.accession_number
+
+        if self.primary_document:
+            base_name = self.primary_document
+
+            # Strip extension if present
+            if '.' in base_name:
+                base_name = base_name.rsplit('.', 1)[0]
+
+            # Remove trailing "-index" or similar suffixes
+            if base_name.lower().endswith('-index'):
+                base_name = base_name[:-6]
+
+            if base_name.replace('-', '').isdigit():
+                self.accession_number = base_name
+                return self.accession_number
+
+        return self.accession_number or ''
+
     @property
     def accession_clean(self) -> str:
         """Return accession number without dashes."""
-        return self.accession_number.replace('-', '')
+        accession = self._ensure_accession_number()
+        return accession.replace('-', '') if accession else ''
 
     @property
     def base_edgar_url(self) -> str:
         """Return base EDGAR URL for this filing."""
-        return f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}/{self.accession_clean}"
+        accession = self.accession_clean
+        if accession:
+            return f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}/{accession}"
+        return f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}"
 
     @property
     def display_name(self) -> str:

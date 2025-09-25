@@ -362,7 +362,11 @@ class EdgarClient:
                 )
 
                 # Build document URLs
-                filing.filing_url = f"{self.ARCHIVES_URL}/{filing.cik_padded}/{filing.accession_clean}/"
+                accession_clean = filing.accession_clean
+                if accession_clean:
+                    filing.filing_url = f"{self.ARCHIVES_URL}/{filing.cik_padded}/{accession_clean}/"
+                else:
+                    filing.filing_url = f"{self.ARCHIVES_URL}/{filing.cik_padded}/"
 
                 filings.append(filing)
 
@@ -427,13 +431,20 @@ class EdgarClient:
 
         directory = index_data.get('directory', {})
         for item in directory.get('item', []):
-            if item.get('type') != 'file':
+            item_type = (item.get('type') or '').lower()
+            if item_type == 'dir':
+                # Skip nested directories for now – viewer assets live at the root
                 continue
 
             name = item.get('name') or ''
+            href = item.get('href') or name
             lower_name = name.lower()
 
             if not name or lower_name == 'index.json':
+                continue
+
+            if href.endswith('/'):
+                # Defensive check in case type metadata is missing but href points to a directory
                 continue
 
             if lower_name.endswith(('.md5', '.idx', '.sig')):
@@ -449,7 +460,7 @@ class EdgarClient:
                 if lower_name.endswith(('.txt', '.csv')):
                     continue
 
-            documents[name] = f"{filing.base_edgar_url}/{name}"
+            documents[name] = f"{filing.base_edgar_url}/{href}"
 
         return documents
 
