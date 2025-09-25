@@ -236,43 +236,66 @@ class EdgarClient:
 
             # Extract entries from ATOM feed
             filings = []
-            for entry in root.findall('.//{http://www.w3.org/2005/Atom}entry'):
-                title_elem = entry.find('.//{http://www.w3.org/2005/Atom}title')
-                link_elem = entry.find('.//{http://www.w3.org/2005/Atom}link')
-                updated_elem = entry.find('.//{http://www.w3.org/2005/Atom}updated')
+            ns = '{http://www.w3.org/2005/Atom}'
 
-                if title_elem is not None and link_elem is not None:
-                    title = title_elem.text or ""
-                    href = link_elem.get('href', '')
+            for entry in root.findall(f'.//{ns}entry'):
+                title_elem = entry.find(f'.//{ns}title')
+                link_elem = entry.find(f'.//{ns}link')
+                updated_elem = entry.find(f'.//{ns}updated')
 
-                    # Extract filing date and accession number from title or link
-                    filing_date = ""
-                    if updated_elem is not None:
-                        filing_date = updated_elem.text.split('T')[0]
+                if title_elem is None or link_elem is None:
+                    continue
 
-                    # Extract accession number from URL
-                    accession = ""
-                    if '/Archives/edgar/data/' in href:
-                        parts = href.split('/')
-                        for part in parts:
-                            if len(part) == 20 and part.replace('-', '').isdigit():
-                                accession = part
-                                break
+                title = title_elem.text or ""
+                href = link_elem.get('href', '')
 
-                    # Determine form type from title
-                    form = "10-K"  # Default to 10-K for now
-                    if "10-Q" in title.upper():
-                        form = "10-Q"
-                    elif "10-K" in title.upper():
-                        form = "10-K"
+                # Extract filing date and accession number from title or link
+                filing_date = ""
+                if updated_elem is not None and updated_elem.text:
+                    filing_date = updated_elem.text.split('T')[0]
 
-                    filings.append({
-                        'accessionNumber': accession,
-                        'filingDate': filing_date,
-                        'form': form,
-                        'primaryDocument': href.split('/')[-1] if href else "",
-                        'primaryDocDescription': title
-                    })
+                accession = ""
+                if '/Archives/edgar/data/' in href:
+                    parts = href.split('/')
+                    for part in parts:
+                        if len(part) == 20 and part.replace('-', '').isdigit():
+                            accession = part
+                            break
+
+                # Determine form type from category metadata when available
+                form = ""
+                for category in entry.findall(f'.//{ns}category'):
+                    term = (category.get('term') or '').strip()
+                    label = (category.get('label') or '').lower()
+                    if not term:
+                        continue
+
+                    if label and 'form' not in label:
+                        continue
+
+                    form = term.upper()
+                    # Prefer the first explicit amendment match
+                    if form.endswith('/A'):
+                        break
+
+                if not form:
+                    title_upper = title.upper()
+                    for candidate in ('10-K/A', '10-Q/A', '10-K', '10-Q'):
+                        if candidate in title_upper:
+                            form = candidate
+                            break
+
+                if not form:
+                    # Fallback to unknown form so downstream filters can ignore it
+                    form = 'UNKNOWN'
+
+                filings.append({
+                    'accessionNumber': accession,
+                    'filingDate': filing_date,
+                    'form': form,
+                    'primaryDocument': href.split('/')[-1] if href else "",
+                    'primaryDocDescription': title
+                })
 
             # Return in the format expected by the rest of the code
             return {
