@@ -1,0 +1,26 @@
+# Core dependencies for SECDataExtractor_v3
+
+# SEC Data Extraction (main pipeline)
+arelle-release>=2.28.0    # SEC filing processing and XBRL handling
+ixbrl-viewer>=1.4.0       # iXBRL viewer generation
+openpyxl>=3.1.0           # Excel file generation
+
+# SEC Filing Downloader
+requests>=2.31.0          # HTTP client for EDGAR API
+beautifulsoup4>=4.12.0    # HTML parsing for filing documents
+lxml>=4.9.0               # XML processing (required by beautifulsoup4)
+python-dateutil>=2.8.0    # Advanced date parsing
+tqdm>=4.66.0              # Progress bars for downloads
+tenacity>=8.2.0           # Retry logic with backoff
+aiohttp>=3.8.0            # Async HTTP client for parallel downloads
+aiofiles>=23.0.0          # Async file operations
+
+# Data handling
+pandas>=2.0.0             # Data manipulation (optional, for advanced processing)
+
+# Development and testing (optional)
+pytest>=7.4.0             # Testing framework
+pytest-asyncio>=0.21.0    # Async testing support
+black>=23.0.0             # Code formatting
+flake8>=6.0.0             # Code linting
+mypy>=1.5.0               # Type checking
