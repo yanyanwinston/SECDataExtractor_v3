@@ -17,6 +17,8 @@ from .presentation_models import (
     StatementTable,
     classify_statement_type
 )
+from .presentation_parser import PresentationParser
+from .fact_matcher import FactMatcher
 from .data_parser import DataParser
 from .value_formatter import ValueFormatter
 from .excel_generator import ExcelGenerator
@@ -37,6 +39,8 @@ __all__ = [
     'StatementRow',
     'StatementTable',
     'classify_statement_type',
+    'PresentationParser',
+    'FactMatcher',
     'DataParser',
     'ValueFormatter',
     'ExcelGenerator'
