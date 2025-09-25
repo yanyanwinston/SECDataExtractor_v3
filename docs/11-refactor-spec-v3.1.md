@@ -913,6 +913,8 @@ class TestPresentationIntegration:
         assert result.error
 ```
 
+_Status:_ Implemented in `tests/test_integration_presentation.py` using the fixture `tests/fixtures/integration_viewer_sample.json` to cover both success and failure flows.
+
 ### Step 5.3: Validation Criteria
 
 **File:** `tests/test_output_validation.py`
@@ -984,6 +986,8 @@ class TestOutputValidation:
                             assert '(' in cell.value and ')' in cell.value
 ```
 
+_Status:_ Core formatting assertions now live in `tests/test_excel_generator.py`, verifying indentation, bold headers, currency formats, negative values, and summary sheet metadata.
+
 ---
 
 ## PHASE 6: Migration Strategy
@@ -1011,9 +1015,16 @@ class TestOutputValidation:
 1. **Regression sweep**: run the updated presentation pipeline against the existing fixture set and a handful of live filings.
 2. **Excel diffing**: compare new workbooks with prior viewer output to catch formatting regressions.
 3. **Telemetry**: add logging around empty-statement failures so we can triage problematic filings quickly.
+
+_Status:_ Automated regression coverage runs via `PYTHONPATH=. pytest` (71 passed, 3 skipped). Live filing smoke tests and Excel diffing remain follow-up items once we stage a full filing set.
 ### Step 6.3: Backwards Compatibility
 
 The legacy fact-grouping parser has been removed. Presentation parsing is now the sole code path, and callers receive explicit `ProcessingResult` failures when the viewer payload is incomplete. Communicate this change as a breaking behaviour shift and document known filing edge cases so support can assist users who encounter newly surfaced errors.
+
+**Known edge-case playbook for support**
+- Filings without `rels.pres` data now fail fast with “presentation statements contained no matchable fact data”; advise rerunning Arelle or re-downloading the filing.
+- If preferred-label totals are absent, Excel sheets still render but totals lack borders—flag these filings for parser inspection.
+- Mixed instant/duration periods produce label disambiguation (`(As of)` vs `(YTD)`); confirm downstream consumers expect the new labels.
 
 ### Quantitative Metrics
 

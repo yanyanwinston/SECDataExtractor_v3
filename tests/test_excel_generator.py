@@ -26,6 +26,13 @@ def _build_statement(name: str, period: Period) -> Statement:
         depth=1,
         abstract=False,
     )
+    negative_node = PresentationNode(
+        concept="us-gaap:OperatingLoss",
+        label="Operating Loss",
+        order=3.5,
+        depth=1,
+        abstract=False,
+    )
     total_node = PresentationNode(
         concept="us-gaap:Assets",
         label="Total Assets",
@@ -40,6 +47,7 @@ def _build_statement(name: str, period: Period) -> Statement:
     for node, raw_value in (
         (root_node, None),
         (child_node, 1234000.0),
+        (negative_node, -500000.0),
         (total_node, 1234000.0),
     ):
         cells = {
@@ -92,24 +100,40 @@ def test_excel_generator_applies_presentation_formatting(tmp_path):
     header_row = 2
     first_data_row = header_row + 1
 
+    # Header row should include the "Item" label
+    assert ws.cell(row=header_row, column=1).value == "Item"
+    assert ws.cell(row=header_row, column=2).value == period.label
+
+    # Index rows by label for easier assertions
+    label_rows = {
+        ws.cell(row=row_idx, column=1).value: row_idx
+        for row_idx in range(first_data_row, ws.max_row + 1)
+    }
+
     # Root abstract row should be bold with no indentation
-    root_cell = ws.cell(row=first_data_row, column=1)
+    root_cell = ws.cell(row=label_rows["Assets"], column=1)
     assert root_cell.font.bold is True
     assert root_cell.alignment.indent == 0
 
     # Child row should inherit depth-based indentation
-    child_cell = ws.cell(row=first_data_row + 1, column=1)
+    child_cell = ws.cell(row=label_rows["Cash and Cash Equivalents"], column=1)
     assert child_cell.alignment.indent == 1
     assert child_cell.font.bold is False
 
+    # Negative row uses currency formatting and remains right aligned
+    loss_value_cell = ws.cell(row=label_rows["Operating Loss"], column=2)
+    assert loss_value_cell.value == -500000.0
+    assert loss_value_cell.number_format == '#,##0.0_);(#,##0.0)'
+
     # Total row should have a top border and bold label
-    total_label_cell = ws.cell(row=first_data_row + 2, column=1)
-    total_value_cell = ws.cell(row=first_data_row + 2, column=2)
+    total_label_cell = ws.cell(row=label_rows["Total Assets"], column=1)
+    total_value_cell = ws.cell(row=label_rows["Total Assets"], column=2)
     assert total_label_cell.font.bold is True
     assert total_value_cell.border.top.style == 'thin'
+    assert total_value_cell.number_format == '#,##0.0_);(#,##0.0)'
 
     # Data cell should be numeric after raw_value handling
-    assert ws.cell(row=first_data_row + 1, column=2).value == 1234000.0
+    assert ws.cell(row=label_rows["Cash and Cash Equivalents"], column=2).value == 1234000.0
 
 
 def test_excel_generator_creates_summary_sheet(tmp_path):
@@ -146,3 +170,7 @@ def test_excel_generator_creates_summary_sheet(tmp_path):
     }
     assert any("Balance Sheet" in entry for entry in listed_statements if entry)
     assert any("Income Statement" in entry for entry in listed_statements if entry)
+
+    # Primary statement sheets should exist alongside the summary
+    sheet_names = set(wb.sheetnames)
+    assert {"Balance Sheet", "Income Statement"}.issubset(sheet_names)

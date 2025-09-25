@@ -1,0 +1,156 @@
+{
+  "sourceReports": [
+    {
+      "targetReports": [
+        {
+          "roleDefs": {
+            "ns1": {
+              "label": "00000001 - Statement - CONSOLIDATED BALANCE SHEETS",
+              "uri": "http://example.com/role/BalanceSheet"
+            }
+          },
+          "rels": {
+            "pres": {
+              "ns1": {
+                "rootElts": [
+                  "us-gaap:StatementOfFinancialPositionAbstract"
+                ],
+                "elrs": {
+                  "http://example.com/role/BalanceSheet": {
+                    "us-gaap:StatementOfFinancialPositionAbstract": {
+                      "order": 1,
+                      "children": {
+                        "us-gaap:AssetsAbstract": {
+                          "order": 2,
+                          "preferredLabel": "terseLabel",
+                          "children": {
+                            "us-gaap:CashAndCashEquivalentsAtCarryingValue": {
+                              "order": 3,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "us-gaap:Assets": {
+                              "order": 4,
+                              "preferredLabel": "totalLabel"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "us-gaap:AssetsAbstract": {
+                      "order": 2,
+                      "preferredLabel": "terseLabel",
+                      "children": {
+                        "us-gaap:CashAndCashEquivalentsAtCarryingValue": {
+                          "order": 3,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "us-gaap:Assets": {
+                          "order": 4,
+                          "preferredLabel": "totalLabel"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "facts": {
+            "f-entity-name": {
+              "a": {
+                "c": "dei:EntityRegistrantName",
+                "v": "Example Corporation",
+                "p": "2023-12-31"
+              }
+            },
+            "f-document-type": {
+              "a": {
+                "c": "dei:DocumentType",
+                "v": "10-K",
+                "p": "2023-12-31"
+              }
+            },
+            "f-period-end": {
+              "a": {
+                "c": "dei:DocumentPeriodEndDate",
+                "v": "2023-12-31",
+                "p": "2023-12-31"
+              }
+            },
+            "f-cash": {
+              "a": {
+                "c": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+                "v": 1500000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-12-31"
+              },
+              "b": {
+                "c": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+                "v": 1200000,
+                "u": "USD",
+                "d": -6,
+                "p": "2022-12-31"
+              }
+            },
+            "f-total-assets": {
+              "a": {
+                "c": "us-gaap:Assets",
+                "v": 2500000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-12-31"
+              },
+              "b": {
+                "c": "us-gaap:Assets",
+                "v": 2100000,
+                "u": "USD",
+                "d": -6,
+                "p": "2022-12-31"
+              }
+            }
+          },
+          "concepts": {
+            "us-gaap:StatementOfFinancialPositionAbstract": {
+              "l": "Consolidated Balance Sheets",
+              "abstract": true
+            },
+            "us-gaap:AssetsAbstract": {
+              "l": "Assets",
+              "labels": {
+                "terseLabel": "Assets"
+              },
+              "abstract": true
+            },
+            "us-gaap:CashAndCashEquivalentsAtCarryingValue": {
+              "l": "Cash and Cash Equivalents",
+              "labels": {
+                "terseLabel": "Cash and cash equivalents"
+              }
+            },
+            "us-gaap:Assets": {
+              "l": "Total Assets",
+              "labels": {
+                "totalLabel": "Total assets"
+              }
+            },
+            "dei:EntityRegistrantName": {
+              "l": "Entity Registrant Name"
+            },
+            "dei:DocumentType": {
+              "l": "Document Type"
+            },
+            "dei:DocumentPeriodEndDate": {
+              "l": "Document Period End Date"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "companyName": "Example Corporation",
+    "formType": "10-K",
+    "filingDate": "2023-12-31"
+  }
+}

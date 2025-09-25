@@ -1,0 +1,61 @@
+"""Integration coverage for presentation-first pipeline."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from src.processor.data_parser import DataParser
+from src.processor.value_formatter import ValueFormatter
+
+
+@pytest.fixture(scope="module")
+def integration_viewer_data() -> dict:
+    """Load the sample viewer payload used for end-to-end testing."""
+    fixture_path = Path(__file__).parent / "fixtures" / "integration_viewer_sample.json"
+    with fixture_path.open("r", encoding="utf-8") as fp:
+        return json.load(fp)
+
+
+def test_end_to_end_presentation_parsing(integration_viewer_data):
+    """Ensure DataParser produces statements with periods, rows, and facts."""
+    parser = DataParser(ValueFormatter(scale_millions=False))
+    result = parser.parse_viewer_data(integration_viewer_data)
+
+    assert result.success is True
+    assert result.company_name == "Example Corporation"
+    assert result.form_type == "10-K"
+    assert result.filing_date == "2023-12-31"
+
+    # We expect a single balance sheet with populated rows/cells.
+    assert len(result.statements) == 1
+    statement = result.statements[0]
+
+    assert statement.periods
+    assert [p.end_date for p in statement.periods] == ["2023-12-31", "2022-12-31"]
+    assert statement.rows
+    assert any(cell.raw_value is not None for row in statement.rows for cell in row.cells.values())
+
+
+def test_reports_failure_when_presentation_missing(integration_viewer_data):
+    """Parser should report failure when presentation relationships are absent."""
+    malformed = {
+        "sourceReports": [
+            {
+                "targetReports": [
+                    {
+                        "roleDefs": {},
+                        "rels": {},
+                        "facts": integration_viewer_data["sourceReports"][0]["targetReports"][0]["facts"],
+                        "concepts": integration_viewer_data["sourceReports"][0]["targetReports"][0]["concepts"],
+                    }
+                ]
+            }
+        ]
+    }
+
+    parser = DataParser()
+    result = parser.parse_viewer_data(malformed)
+
+    assert result.success is False
+    assert "presentation statements" in (result.error or "").lower()
