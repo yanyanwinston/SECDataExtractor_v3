@@ -6,7 +6,7 @@ enabling exact visual fidelity with the original filing presentation.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple
 from enum import Enum
 
 # Import existing data models for compatibility
@@ -54,25 +54,6 @@ class PresentationNode:
 
         return result
 
-    def find_node_by_concept(self, concept: str) -> Optional['PresentationNode']:
-        """Find a node in this subtree by concept name."""
-        if self.concept == concept:
-            return self
-
-        for child in self.children:
-            found = child.find_node_by_concept(concept)
-            if found:
-                return found
-
-        return None
-
-    def get_all_concepts(self) -> List[str]:
-        """Get all concept names in this subtree."""
-        concepts = [self.concept]
-        for child in self.children:
-            concepts.extend(child.get_all_concepts())
-        return concepts
-
     def __str__(self) -> str:
         """String representation showing tree structure."""
         indent = "  " * self.depth
@@ -103,26 +84,6 @@ class PresentationStatement:
             result.extend(root.get_all_nodes_flat())
 
         return result
-
-    def find_node_by_concept(self, concept: str) -> Optional[PresentationNode]:
-        """Find a node by concept name anywhere in the statement."""
-        for root in self.root_nodes:
-            found = root.find_node_by_concept(concept)
-            if found:
-                return found
-        return None
-
-    def get_all_concepts(self) -> List[str]:
-        """Get all concept names in this statement."""
-        concepts = []
-        for root in self.root_nodes:
-            concepts.extend(root.get_all_concepts())
-        return concepts
-
-    def add_root_node(self, node: PresentationNode) -> None:
-        """Add a root node to this statement."""
-        node.depth = 0  # Ensure root nodes have depth 0
-        self.root_nodes.append(node)
 
     def get_short_name(self) -> str:
         """Get short name suitable for Excel sheet tabs."""
@@ -183,14 +144,6 @@ class StatementRow:
         """XBRL concept name."""
         return self.node.concept
 
-    def add_cell(self, period_id: str, cell: Cell) -> None:
-        """Add a cell for a specific period."""
-        self.cells[period_id] = cell
-
-    def get_cell(self, period_id: str) -> Optional[Cell]:
-        """Get cell for a specific period."""
-        return self.cells.get(period_id)
-
     def has_data(self) -> bool:
         """Check if this row has any meaningful cell values."""
         for cell in self.cells.values():
@@ -229,76 +182,14 @@ class StatementTable:
     periods: List[Period]              # Time periods (from existing data_models.py)
     rows: List[StatementRow] = field(default_factory=list)  # Ordered by presentation
 
-    def add_row(self, row: StatementRow) -> None:
-        """Add a row to the statement table."""
-        self.rows.append(row)
-
-    def get_row_by_concept(self, concept: str) -> Optional[StatementRow]:
-        """Find a row by its concept."""
-        return next((row for row in self.rows if row.concept == concept), None)
-
-    def get_abstract_rows(self) -> List[StatementRow]:
-        """Get all header/section rows."""
-        return [row for row in self.rows if row.is_abstract]
-
-    def get_data_rows(self) -> List[StatementRow]:
-        """Get all rows with actual data (non-abstract)."""
-        return [row for row in self.rows if not row.is_abstract]
-
-    def get_rows_with_data(self) -> List[StatementRow]:
-        """Get all rows that have at least one non-empty cell."""
-        return [row for row in self.rows if row.has_data()]
-
-    def validate(self) -> List[str]:
-        """Validate the statement table and return any issues."""
-        issues = []
-
-        if not self.periods:
-            issues.append("No periods defined")
-
-        if not self.rows:
-            issues.append("No rows defined")
-
-        # Check for duplicate concepts
-        concepts = [row.concept for row in self.rows if row.concept]
-        duplicates = [c for c in set(concepts) if concepts.count(c) > 1]
-        if duplicates:
-            issues.append(f"Duplicate concepts: {duplicates}")
-
-        # Check for rows with invalid depths
-        invalid_depths = [row for row in self.rows if row.depth < 0]
-        if invalid_depths:
-            issues.append(f"Rows with negative depth: {len(invalid_depths)}")
-
-        return issues
-
-    def to_legacy_statement(self) -> 'Statement':
-        """Convert to legacy Statement format for backward compatibility."""
-        from .data_models import Statement, Row
-
-        legacy_rows = []
-        for stmt_row in self.rows:
-            legacy_row = Row(
-                label=stmt_row.label,
-                concept=stmt_row.concept,
-                is_abstract=stmt_row.is_abstract,
-                depth=stmt_row.depth,
-                cells={period_id: cell for period_id, cell in stmt_row.cells.items()}
-            )
-            legacy_rows.append(legacy_row)
-
-        return Statement(
-            name=self.statement.statement_name,
-            short_name=self.statement.get_short_name(),
-            periods=self.periods,
-            rows=legacy_rows
-        )
-
     def __str__(self) -> str:
         """String representation of the complete statement table."""
         lines = [str(self.statement)]
         lines.append(f"Periods: {len(self.periods)}")
-        lines.append(f"Rows: {len(self.rows)} ({len(self.get_data_rows())} data, {len(self.get_abstract_rows())} headers)")
+
+        abstract_rows = sum(1 for row in self.rows if row.is_abstract)
+        data_rows = len(self.rows) - abstract_rows
+        lines.append(f"Rows: {len(self.rows)} ({data_rows} data, {abstract_rows} headers)")
 
         if self.periods:
             period_labels = [p.label for p in self.periods[:3]]

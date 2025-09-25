@@ -73,24 +73,6 @@ class TestPresentationParser:
         assert self.parser._is_financial_statement_role(cash_flow_role) is True
         assert self.parser._is_financial_statement_role(cover_page_role) is True
 
-    def test_find_root_concepts(self):
-        """Test finding root concepts in presentation relationships."""
-        role_data = self.fixtures["presentation_relationships"]["data"]["relationships"]
-
-        root_concepts = self.parser._find_root_concepts(role_data)
-
-        assert len(root_concepts) > 0
-        assert "us-gaap:StatementOfFinancialPositionAbstract" in root_concepts
-
-        # Root concepts should not appear as children
-        all_children = set()
-        for parent, children in role_data.items():
-            for child in children:
-                all_children.add(child['t'])
-
-        for root in root_concepts:
-            assert root not in all_children
-
     def test_build_presentation_tree(self):
         """Test building presentation tree recursively."""
         role_data = self.fixtures["presentation_relationships"]["data"]["relationships"]
@@ -332,31 +314,6 @@ class TestFactMatcher:
                     assert cell.period == period_label
                     assert cell.value is not None  # Should have value or "—"
 
-    def test_get_statement_summary(self):
-        """Test generating statement summary."""
-        # Parse a statement and create table
-        statements = self.parser.parse_presentation_statements(self.mock_viewer_json)
-
-        if statements:
-            statement = statements[0]
-            facts = self.fixtures["sample_facts"]["data"]
-            periods = self.fact_matcher.extract_periods_from_facts(facts)
-            table = self.fact_matcher.match_facts_to_statement(statement, facts, periods)
-
-            summary = self.fact_matcher.get_statement_summary(table)
-
-            assert 'statement_name' in summary
-            assert 'statement_type' in summary
-            assert 'total_rows' in summary
-            assert 'abstract_rows' in summary
-            assert 'data_rows' in summary
-            assert 'rows_with_data' in summary
-            assert 'periods' in summary
-            assert 'period_labels' in summary
-
-            assert summary['total_rows'] > 0
-            assert summary['periods'] == len(periods)
-
     def test_mock_formatter_integration(self):
         """Test fact matcher with mock formatter."""
         # Create mock formatter
@@ -428,16 +385,10 @@ class TestPresentationParserIntegration:
             table = fact_matcher.match_facts_to_statement(statement, facts, periods)
             tables.append(table)
 
-            # Validate table structure
+            # Validate summary structure
             assert table.statement == statement
             assert len(table.periods) == len(periods)
             assert len(table.rows) > 0
-
-            # Test conversion to legacy format
-            legacy_statement = table.to_legacy_statement()
-            assert legacy_statement.name == statement.statement_name
-            assert len(legacy_statement.rows) == len(table.rows)
-            assert len(legacy_statement.periods) == len(periods)
 
         assert len(tables) == len(statements)
 

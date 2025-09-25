@@ -6,7 +6,7 @@ nodes, creating complete statement tables ready for Excel generation.
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 
 from .presentation_models import PresentationStatement, StatementTable, StatementRow
 from .data_models import Period, Cell
@@ -285,28 +285,3 @@ class FactMatcher:
         except Exception:
             # Fallback to original string if parsing fails
             return date_str
-
-    def get_statement_summary(self, table: StatementTable) -> Dict[str, Any]:
-        """Get summary information about a statement table.
-
-        Args:
-            table: StatementTable to summarize
-
-        Returns:
-            Dictionary with summary statistics
-        """
-        total_rows = len(table.rows)
-        abstract_rows = len(table.get_abstract_rows())
-        data_rows = len(table.get_data_rows())
-        rows_with_data = len(table.get_rows_with_data())
-
-        return {
-            'statement_name': table.statement.statement_name,
-            'statement_type': table.statement.statement_type.value,
-            'total_rows': total_rows,
-            'abstract_rows': abstract_rows,
-            'data_rows': data_rows,
-            'rows_with_data': rows_with_data,
-            'periods': len(table.periods),
-            'period_labels': [p.label for p in table.periods]
-        }

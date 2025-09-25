@@ -7,7 +7,6 @@ for exact visual fidelity with the original filing presentation.
 """
 
 import pytest
-from pathlib import Path
 from src.processor.presentation_models import (
     StatementType,
     PresentationNode,
@@ -114,42 +113,6 @@ class TestPresentationNode:
         assert flat_nodes[1] == (current, 1)
         assert flat_nodes[2] == (cash, 2)
 
-    def test_find_node_by_concept(self):
-        """Test finding nodes by concept name."""
-        root = PresentationNode("us-gaap:Assets", "Assets", 1.0, 0, True)
-        child1 = PresentationNode("us-gaap:Cash", "Cash", 1.0, 0, False)
-        child2 = PresentationNode("us-gaap:Inventory", "Inventory", 2.0, 0, False)
-
-        root.add_child(child1)
-        root.add_child(child2)
-
-        # Find existing nodes
-        found_root = root.find_node_by_concept("us-gaap:Assets")
-        found_cash = root.find_node_by_concept("us-gaap:Cash")
-        found_inventory = root.find_node_by_concept("us-gaap:Inventory")
-
-        assert found_root == root
-        assert found_cash == child1
-        assert found_inventory == child2
-
-        # Find non-existent node
-        not_found = root.find_node_by_concept("us-gaap:NotExists")
-        assert not_found is None
-
-    def test_get_all_concepts(self):
-        """Test getting all concept names from subtree."""
-        root = PresentationNode("us-gaap:Assets", "Assets", 1.0, 0, True)
-        child1 = PresentationNode("us-gaap:Cash", "Cash", 1.0, 0, False)
-        child2 = PresentationNode("us-gaap:Inventory", "Inventory", 2.0, 0, False)
-
-        root.add_child(child1)
-        root.add_child(child2)
-
-        concepts = root.get_all_concepts()
-        expected = ["us-gaap:Assets", "us-gaap:Cash", "us-gaap:Inventory"]
-
-        assert set(concepts) == set(expected)
-
     def test_node_string_representation(self):
         """Test string representation of nodes."""
         abstract_node = PresentationNode("us-gaap:Assets", "Assets", 1.0, 0, True)
@@ -178,20 +141,6 @@ class TestPresentationStatement:
         assert stmt.statement_type == StatementType.BALANCE_SHEET
         assert len(stmt.root_nodes) == 0
 
-    def test_add_root_node(self):
-        """Test adding root nodes to statement."""
-        stmt = PresentationStatement("", "ns9", "Balance Sheet", StatementType.BALANCE_SHEET)
-
-        node1 = PresentationNode("us-gaap:Assets", "Assets", 1.0, 5, True)  # Wrong depth
-        node2 = PresentationNode("us-gaap:Liabilities", "Liabilities", 2.0, 3, True)  # Wrong depth
-
-        stmt.add_root_node(node1)
-        stmt.add_root_node(node2)
-
-        assert len(stmt.root_nodes) == 2
-        assert node1.depth == 0  # Should be corrected to 0
-        assert node2.depth == 0  # Should be corrected to 0
-
     def test_get_all_nodes_flat(self):
         """Test flattening statement with multiple root nodes."""
         stmt = PresentationStatement("", "ns9", "Balance Sheet", StatementType.BALANCE_SHEET)
@@ -205,8 +154,9 @@ class TestPresentationStatement:
         payables = PresentationNode("us-gaap:Payables", "Payables", 1.0, 0, False)
         liabilities.add_child(payables)
 
-        stmt.add_root_node(assets)
-        stmt.add_root_node(liabilities)
+        assets.depth = 0
+        liabilities.depth = 0
+        stmt.root_nodes = [assets, liabilities]
 
         # Flatten (should respect root node order)
         flat_nodes = stmt.get_all_nodes_flat()
@@ -215,28 +165,6 @@ class TestPresentationStatement:
         # Should be ordered by root node order (Assets=1.0, Liabilities=2.0)
         concepts = [node.concept for node, depth in flat_nodes]
         assert concepts == ["us-gaap:Assets", "us-gaap:Cash", "us-gaap:Liabilities", "us-gaap:Payables"]
-
-    def test_find_node_by_concept(self):
-        """Test finding nodes across multiple root trees."""
-        stmt = PresentationStatement("", "ns9", "Balance Sheet", StatementType.BALANCE_SHEET)
-
-        assets = PresentationNode("us-gaap:Assets", "Assets", 1.0, 0, True)
-        cash = PresentationNode("us-gaap:Cash", "Cash", 1.0, 0, False)
-        assets.add_child(cash)
-
-        liabilities = PresentationNode("us-gaap:Liabilities", "Liabilities", 2.0, 0, True)
-
-        stmt.add_root_node(assets)
-        stmt.add_root_node(liabilities)
-
-        # Find nodes from different trees
-        found_assets = stmt.find_node_by_concept("us-gaap:Assets")
-        found_cash = stmt.find_node_by_concept("us-gaap:Cash")
-        found_liabilities = stmt.find_node_by_concept("us-gaap:Liabilities")
-
-        assert found_assets == assets
-        assert found_cash == cash
-        assert found_liabilities == liabilities
 
     def test_get_short_name(self):
         """Test generating short names for Excel sheets."""
@@ -270,22 +198,6 @@ class TestStatementRow:
         assert row.is_abstract is False
         assert len(row.cells) == 0
 
-    def test_add_get_cell(self):
-        """Test adding and getting cells."""
-        node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
-        row = StatementRow(node=node)
-
-        cell1 = Cell(value="1,000", raw_value=1000.0, unit="usd", decimals=-3, period="2023")
-        cell2 = Cell(value="2,000", raw_value=2000.0, unit="usd", decimals=-3, period="2022")
-
-        row.add_cell("2023", cell1)
-        row.add_cell("2022", cell2)
-
-        assert len(row.cells) == 2
-        assert row.get_cell("2023") == cell1
-        assert row.get_cell("2022") == cell2
-        assert row.get_cell("2021") is None
-
     def test_has_data(self):
         """Test detecting rows with data."""
         node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
@@ -296,17 +208,17 @@ class TestStatementRow:
 
         # Empty cells - no data
         empty_cell = Cell(value="", raw_value=None, unit=None, decimals=None, period="2023")
-        row.add_cell("2023", empty_cell)
+        row.cells["2023"] = empty_cell
         assert row.has_data() is False
 
         # Placeholder dash should not count as data
         dash_cell = Cell(value="—", raw_value=None, unit=None, decimals=None, period="2023")
-        row.add_cell("2023-dash", dash_cell)
+        row.cells["2023-dash"] = dash_cell
         assert row.has_data() is False
 
         # Cell with data
         data_cell = Cell(value="1,000", raw_value=1000.0, unit="usd", decimals=-3, period="2022")
-        row.add_cell("2022", data_cell)
+        row.cells["2022"] = data_cell
         assert row.has_data() is True
 
 
@@ -334,132 +246,6 @@ class TestStatementTable:
         assert table.statement == self.statement
         assert table.periods == self.periods
         assert len(table.rows) == 0
-
-    def test_add_rows(self):
-        """Test adding rows to table."""
-        table = StatementTable(statement=self.statement, periods=self.periods)
-
-        # Create test rows
-        assets_node = PresentationNode("us-gaap:Assets", "Total Assets", 1.0, 0, True)
-        assets_row = StatementRow(node=assets_node)
-
-        cash_node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
-        cash_row = StatementRow(node=cash_node)
-
-        table.add_row(assets_row)
-        table.add_row(cash_row)
-
-        assert len(table.rows) == 2
-        assert table.rows[0] == assets_row
-        assert table.rows[1] == cash_row
-
-    def test_get_row_by_concept(self):
-        """Test finding rows by concept."""
-        table = StatementTable(statement=self.statement, periods=self.periods)
-
-        cash_node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
-        cash_row = StatementRow(node=cash_node)
-        table.add_row(cash_row)
-
-        found_row = table.get_row_by_concept("us-gaap:Cash")
-        assert found_row == cash_row
-
-        not_found = table.get_row_by_concept("us-gaap:NotExists")
-        assert not_found is None
-
-    def test_get_abstract_and_data_rows(self):
-        """Test filtering abstract vs data rows."""
-        table = StatementTable(statement=self.statement, periods=self.periods)
-
-        # Add abstract row
-        assets_node = PresentationNode("us-gaap:AssetsAbstract", "Assets", 1.0, 0, True)
-        assets_row = StatementRow(node=assets_node)
-        table.add_row(assets_row)
-
-        # Add data row
-        cash_node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
-        cash_row = StatementRow(node=cash_node)
-        table.add_row(cash_row)
-
-        abstract_rows = table.get_abstract_rows()
-        data_rows = table.get_data_rows()
-
-        assert len(abstract_rows) == 1
-        assert len(data_rows) == 1
-        assert abstract_rows[0] == assets_row
-        assert data_rows[0] == cash_row
-
-    def test_get_rows_with_data(self):
-        """Test filtering rows with actual cell data."""
-        table = StatementTable(statement=self.statement, periods=self.periods)
-
-        # Row with data
-        cash_node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 1, False)
-        cash_row = StatementRow(node=cash_node)
-        cash_cell = Cell(value="1,000", raw_value=1000.0, unit="usd", decimals=-3, period="2023")
-        cash_row.add_cell("2023", cash_cell)
-        table.add_row(cash_row)
-
-        # Row without data
-        empty_node = PresentationNode("us-gaap:Empty", "Empty", 2.0, 1, False)
-        empty_row = StatementRow(node=empty_node)
-        table.add_row(empty_row)
-
-        rows_with_data = table.get_rows_with_data()
-        assert len(rows_with_data) == 1
-        assert rows_with_data[0] == cash_row
-
-    def test_validate(self):
-        """Test statement table validation."""
-        # Valid table
-        table = StatementTable(statement=self.statement, periods=self.periods)
-        cash_node = PresentationNode("us-gaap:Cash", "Cash", 1.0, 0, False)
-        cash_row = StatementRow(node=cash_node)
-        table.add_row(cash_row)
-
-        issues = table.validate()
-        assert len(issues) == 0
-
-        # Invalid table - no periods
-        invalid_table = StatementTable(statement=self.statement, periods=[])
-        issues = invalid_table.validate()
-        assert any("No periods" in issue for issue in issues)
-
-        # Invalid table - duplicate concepts
-        duplicate_table = StatementTable(statement=self.statement, periods=self.periods)
-        row1 = StatementRow(node=PresentationNode("us-gaap:Cash", "Cash 1", 1.0, 0, False))
-        row2 = StatementRow(node=PresentationNode("us-gaap:Cash", "Cash 2", 2.0, 0, False))
-        duplicate_table.add_row(row1)
-        duplicate_table.add_row(row2)
-
-        issues = duplicate_table.validate()
-        assert any("Duplicate concepts" in issue for issue in issues)
-
-    def test_to_legacy_statement(self):
-        """Test converting to legacy Statement format."""
-        table = StatementTable(statement=self.statement, periods=self.periods)
-
-        # Add test row
-        cash_node = PresentationNode("us-gaap:Cash", "Cash and Cash Equivalents", 1.0, 1, False)
-        cash_row = StatementRow(node=cash_node)
-        cash_cell = Cell(value="1,000", raw_value=1000.0, unit="usd", decimals=-3, period="2023")
-        cash_row.add_cell("2023", cash_cell)
-        table.add_row(cash_row)
-
-        # Convert to legacy
-        legacy_stmt = table.to_legacy_statement()
-
-        assert legacy_stmt.name == "Consolidated Balance Sheets"
-        assert legacy_stmt.short_name == "Balance Sheet"
-        assert len(legacy_stmt.periods) == 2
-        assert len(legacy_stmt.rows) == 1
-
-        legacy_row = legacy_stmt.rows[0]
-        assert legacy_row.label == "Cash and Cash Equivalents"
-        assert legacy_row.concept == "us-gaap:Cash"
-        assert legacy_row.depth == 1
-        assert legacy_row.is_abstract is False
-        assert "2023" in legacy_row.cells
 
 
 if __name__ == "__main__":

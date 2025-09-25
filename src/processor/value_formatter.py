@@ -2,7 +2,6 @@
 Value formatter for SEC financial data.
 """
 
-import re
 from typing import Optional, Dict, Any
 
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .data_models import Statement, ProcessingResult

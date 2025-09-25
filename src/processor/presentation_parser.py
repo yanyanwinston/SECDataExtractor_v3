@@ -8,7 +8,7 @@ visual fidelity of the original filing.
 
 import logging
 import re
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .presentation_models import (
     PresentationNode, PresentationStatement, classify_statement_type
@@ -222,12 +222,6 @@ class PresentationParser:
                 entry['children'][child_concept] = child_entry
 
         return root_concepts, relationships
-
-    def _find_root_concepts(self, role_data: dict) -> List[str]:
-        """Compatibility helper to expose root concepts for a role."""
-
-        root_concepts, _ = self._normalize_role_data(role_data)
-        return root_concepts
 
     def _build_presentation_tree(self, concept: str, relationships: Dict[str, dict],
                                 concepts: dict, depth: int) -> PresentationNode:

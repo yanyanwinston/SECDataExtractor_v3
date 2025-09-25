@@ -2,7 +2,6 @@
 Input handler for processing various filing sources.
 """
 
-import os
 import tempfile
 import zipfile
 from abc import ABC, abstractmethod
