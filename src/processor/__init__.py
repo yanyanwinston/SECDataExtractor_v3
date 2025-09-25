@@ -9,6 +9,14 @@ from .input_handler import InputHandler, FilingSource
 from .arelle_processor import ArelleProcessor
 from .json_extractor import ViewerDataExtractor
 from .data_models import Statement, Period, Row, Cell, ProcessingResult
+from .presentation_models import (
+    StatementType,
+    PresentationNode,
+    PresentationStatement,
+    StatementRow,
+    StatementTable,
+    classify_statement_type
+)
 from .data_parser import DataParser
 from .value_formatter import ValueFormatter
 from .excel_generator import ExcelGenerator
@@ -23,6 +31,12 @@ __all__ = [
     'Row',
     'Cell',
     'ProcessingResult',
+    'StatementType',
+    'PresentationNode',
+    'PresentationStatement',
+    'StatementRow',
+    'StatementTable',
+    'classify_statement_type',
     'DataParser',
     'ValueFormatter',
     'ExcelGenerator'
