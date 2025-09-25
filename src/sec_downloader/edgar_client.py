@@ -377,46 +377,81 @@ class EdgarClient:
             raise EdgarError(f"Failed to search filings: {e}")
 
     def get_filing_documents(self, filing: Filing) -> Dict[str, str]:
-        """
-        Get document list for a filing.
+        """Return a map of document names → URLs for the given filing."""
 
-        Args:
-            filing: Filing object
-
-        Returns:
-            Dictionary mapping document names to URLs
-        """
         logger.info(f"Getting documents for filing: {filing.accession_number}")
 
+        documents: Dict[str, str] = {}
+
         try:
-            # Try to get the filing index page
+            # Primary index (lists core submission artifacts)
             index_url = f"{filing.base_edgar_url}/index.json"
-
             try:
-                response = self._make_request(index_url)
-                index_data = response.json()
+                index_data = self._make_request(index_url).json()
+                documents.update(self._extract_documents_from_index(index_data, filing))
+            except EdgarError as exc:
+                logger.warning(f"Primary index fetch failed: {exc}")
 
-                documents = {}
-                for item in index_data.get('directory', {}).get('item', []):
-                    if item.get('type') == 'file':
-                        name = item.get('name', '')
-                        if name.endswith(('.htm', '.html', '.xml')):
-                            documents[name] = f"{filing.base_edgar_url}/{name}"
+            # Attempt to fetch viewer-specific resources (contains ixviewer.zip)
+            viewer_index_urls = [
+                f"{filing.base_edgar_url}/index.json?type=viewer",
+                f"{filing.base_edgar_url}/index.json?type=download"
+            ]
+            for viewer_url in viewer_index_urls:
+                try:
+                    viewer_data = self._make_request(viewer_url).json()
+                    docs = self._extract_documents_from_index(viewer_data, filing)
+                    if docs:
+                        logger.debug(f"Found {len(docs)} viewer documents for {filing.accession_number}")
+                    documents.update(docs)
+                except EdgarError:
+                    continue
 
-                return documents
+            if not documents and filing.primary_document:
+                logger.warning("No index JSON documents discovered; falling back to primary document only")
+                documents[filing.primary_document] = f"{filing.base_edgar_url}/{filing.primary_document}"
 
-            except EdgarError:
-                # Fall back to primary document if available
-                if filing.primary_document:
-                    return {
-                        filing.primary_document: f"{filing.base_edgar_url}/{filing.primary_document}"
-                    }
-
-                return {}
+            return documents
 
         except Exception as e:
             logger.error(f"Error getting filing documents: {e}")
             raise EdgarError(f"Failed to get filing documents: {e}")
+
+    def _extract_documents_from_index(self, index_data: Dict[str, Any], filing: Filing) -> Dict[str, str]:
+        """Extract file entries from an EDGAR index.json structure."""
+
+        documents: Dict[str, str] = {}
+
+        if not index_data:
+            return documents
+
+        directory = index_data.get('directory', {})
+        for item in directory.get('item', []):
+            if item.get('type') != 'file':
+                continue
+
+            name = item.get('name') or ''
+            lower_name = name.lower()
+
+            if not name or lower_name == 'index.json':
+                continue
+
+            if lower_name.endswith(('.md5', '.idx', '.sig')):
+                continue
+
+            # Capture common inline XBRL assets (viewer, submission packages, XML, HTML, JSON, ZIP)
+            if not lower_name.endswith((
+                '.htm', '.html', '.xml', '.json', '.zip', '.xsd', '.xbrl'
+            )) and lower_name not in {
+                'fullsubmission.txt', 'financial_report.xlsx'
+            }:
+                # Keep primary documents and ixviewer assets, skip md5/checksum files
+                if lower_name.endswith(('.txt', '.csv')):
+                    continue
+
+            documents[name] = f"{filing.base_edgar_url}/{name}"
+
+        return documents
 
     def download_file(self, url: str, local_path: str) -> bool:
         """

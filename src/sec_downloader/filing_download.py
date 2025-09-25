@@ -14,6 +14,7 @@ from typing import List, Optional, Dict, Any
 from tqdm import tqdm
 import zipfile
 from urllib.parse import urlparse
+import shutil
 
 from .models import Filing, DownloadConfig, DownloadResult
 from .edgar_client import EdgarClient, EdgarError
@@ -82,6 +83,8 @@ class FilingDownload:
             downloaded_files = []
             primary_doc_found = False
 
+            ixviewer_zip_path: Optional[Path] = None
+
             # Download each document
             for doc_name, doc_url in documents.items():
                 # Skip non-essential files if not requested
@@ -104,6 +107,8 @@ class FilingDownload:
                     downloaded_files.append(str(local_path))
                     if doc_name == filing.primary_document or doc_name.endswith(('.htm', '.html')):
                         primary_doc_found = True
+                    if safe_filename.lower() == 'ixviewer.zip':
+                        ixviewer_zip_path = local_path
                     logger.debug(f"Downloaded: {doc_name}")
                 else:
                     logger.warning(f"Failed to download: {doc_name}")
@@ -114,6 +119,13 @@ class FilingDownload:
                     success=False,
                     error="No files were successfully downloaded"
                 )
+
+            # Extract ixviewer.zip so viewer.json is readily available
+            if ixviewer_zip_path and ixviewer_zip_path.exists():
+                try:
+                    self._extract_ixviewer(ixviewer_zip_path, filing_dir)
+                except Exception as exc:
+                    logger.warning(f"Failed to extract ixviewer.zip for {filing.display_name}: {exc}")
 
             # Save metadata
             metadata_path = self._save_filing_metadata(filing, filing_dir, documents)
@@ -140,6 +152,19 @@ class FilingDownload:
                 success=False,
                 error=str(e)
             )
+
+    def _extract_ixviewer(self, zip_path: Path, filing_dir: Path) -> None:
+        """Extract ixviewer.zip into a dedicated directory."""
+
+        target_dir = filing_dir / 'ixviewer'
+        if target_dir.exists():
+            logger.debug(f"Removing existing ixviewer directory at {target_dir}")
+            shutil.rmtree(target_dir)
+
+        with zipfile.ZipFile(zip_path, 'r') as archive:
+            archive.extractall(target_dir)
+
+        logger.info(f"Extracted ixviewer bundle to {target_dir}")
 
     def download_filings(
         self,
