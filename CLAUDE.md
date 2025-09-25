@@ -52,11 +52,14 @@ iXBRL Filing → Arelle Processing → Viewer JSON → Data Models → Excel Out
 - `02-system-architecture.md` - Processing pipeline and component design
 - `03-arelle-setup.md` - Arelle installation and configuration
 - `04-json-extraction.md` - Viewer data parsing techniques
-- `05-data-models.md` - Data structure definitions
+- `05-data-models.md` - Data structure definitions (updated for presentation-based approach)
 - `06-data-transformation.md` - Value formatting and processing rules
 - `07-excel-generation.md` - XLSX output generation
 - `08-cli-interface.md` - Command-line interface specification
 - `09-testing-strategy.md` - Testing approach and scenarios
+- `10-download-module.md` - SEC filing download module documentation
+- `11-refactor-spec-v3.1.md` - **CRITICAL: Complete refactor specification for presentation-based approach**
+- `12-quick-start.md` - Quick start guide
 
 ## Core Features
 
@@ -131,18 +134,81 @@ Only add complexity when you have a **concrete, immediate need**:
 
 ## Current Implementation Status
 
-The project has:
+### Completed (MVP v3.0)
 - ✅ Download module - Complete SEC filing downloader
-- ✅ Virtual environment setup
-- ✅ Requirements file with dependencies
-- ❌ Main processing pipeline (render_viewer_to_xlsx.py)
+- ✅ Virtual environment setup and dependencies
+- ✅ Main processing pipeline (render_viewer_to_xlsx.py) - **WORKING**
+- ✅ Arelle integration with iXBRLViewerPlugin
+- ✅ JSON extraction from viewer HTML
+- ✅ Excel generation with formatting
+- ✅ End-to-end pipeline tested with Apple 10-K
 
-## Development Priorities (MVP Focus)
+### Current Issue (Identified September 2024)
+**The current implementation produces incorrect output** because it:
+- ❌ Ignores presentation linkbase structure from Arelle
+- ❌ Groups facts by concept name patterns instead of using presentation tree
+- ❌ Uses wrong labels (concept names vs preferred labels)
+- ❌ Loses intended row ordering and hierarchy
+- ❌ Produces output that doesn't match the iXBRL viewer
 
-1. **Make download_filings.py work perfectly** - Focus on one thing first
-2. **Build basic render_viewer_to_xlsx.py** - Minimal working version
-3. **Test with real data** - Use actual filings, fix what breaks
-4. **Add features only when requested** - Don't build "nice to have" features
+### Solution: Refactor to v3.1 (Presentation-Based)
+**See `docs/11-refactor-spec-v3.1.md` for detailed plan**
+
+The refactor will:
+- ✅ Parse presentation linkbase from Arelle's viewer JSON
+- ✅ Follow presentation tree for correct row order and hierarchy
+- ✅ Use preferred labels from presentation context
+- ✅ Match facts to presentation cells properly
+- ✅ Generate Excel that exactly matches iXBRL viewer
+
+### Key Insight
+**Arelle already provides 80% of what we need** - the iXBRLViewerPlugin creates complete presentation structure in the viewer JSON. We just need to parse and use it correctly instead of reconstructing from raw facts.
+
+## Development Priorities (v3.1 Refactor)
+
+1. **Phase 1**: Document and understand viewer JSON structure
+2. **Phase 2**: Create presentation-based data models
+3. **Phase 3**: Implement presentation parser and fact matcher
+4. **Phase 4**: Integrate with existing pipeline (feature flag)
+5. **Phase 5**: Test and validate against iXBRL viewer output
+6. **Phase 6**: Migrate from fact-based to presentation-based approach
+
+## Refactor Architecture (v3.1)
+
+### Current Problem: Fact-Based Reconstruction
+```
+Facts → Group by Concept → Guess Structure → Excel
+❌ Wrong row order, wrong labels, missing hierarchy
+```
+
+### New Solution: Presentation-Based Rendering
+```
+Viewer JSON → Parse Presentation Tree → Match Facts to Tree → Excel
+✅ Exact match to iXBRL viewer structure
+```
+
+### Key New Components
+
+1. **PresentationParser** (`src/processor/presentation_parser.py`)
+   - Extracts presentation relationships from viewer JSON
+   - Builds hierarchical tree structure for each statement
+   - Preserves order, depth, and preferred labels
+
+2. **FactMatcher** (`src/processor/fact_matcher.py`)
+   - Matches facts to presentation nodes by concept and period
+   - Handles missing data gracefully
+   - Applies proper formatting from ValueFormatter
+
+3. **New Data Models** (`src/processor/presentation_models.py`)
+   - PresentationNode - represents tree structure
+   - PresentationStatement - complete statement with tree
+   - StatementTable - ready-to-render with facts matched
+
+### Migration Strategy
+- Feature flag for backwards compatibility
+- Parallel implementation during transition
+- Comprehensive testing against iXBRL viewer
+- Gradual rollout with fallback to legacy approach
 
 ## Development Environment
 

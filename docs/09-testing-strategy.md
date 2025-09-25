@@ -140,6 +140,7 @@ For each test filing, maintain reference files:
 ### Test Categories
 
 #### Component Tests
+
 ```python
 def test_arelle_processing():
     """Test Arelle viewer generation."""
@@ -150,6 +151,64 @@ def test_json_extraction():
     """Test JSON extraction from viewer HTML."""
     json_data = extract_viewer_json(VIEWER_HTML_PATH)
     assert validate_json_structure(json_data)
+
+def test_presentation_tree_parsing():
+    """Test presentation tree construction from relationships."""
+    viewer_data = load_test_viewer_data()
+    parser = PresentationParser()
+
+    # Build tree for balance sheet role
+    tree = parser.build_presentation_tree(
+        role_id="http://example.com/role/BalanceSheet",
+        relationships=viewer_data['rels'],
+        concepts=viewer_data['concepts']
+    )
+
+    # Verify tree structure
+    assert len(tree) > 0  # Has root nodes
+    assert tree[0].concept == "us-gaap:Assets"  # Assets is first
+    assert tree[0].children  # Assets has children
+    assert tree[0].depth == 0  # Root level
+
+def test_fact_matching():
+    """Test fact matching to presentation concepts."""
+    viewer_data = load_test_viewer_data()
+    parser = DataParser()
+
+    # Test matching specific fact
+    period = Period(label="2023-09-30", end_date="2023-09-30", instant=True)
+    cell = parser._match_fact_to_concept(
+        concept="us-gaap:Assets",
+        period=period,
+        facts=viewer_data['facts']
+    )
+
+    assert cell is not None
+    assert cell.concept == "us-gaap:Assets"
+    assert cell.period == "2023-09-30"
+    assert cell.raw_value > 0
+
+def test_preferred_label_resolution():
+    """Test preferred label extraction from concepts."""
+    concept_info = {
+        'labels': {
+            'http://www.xbrl.org/2003/role/totalLabel': 'Total Assets',
+            'http://www.xbrl.org/2003/role/label': 'Assets'
+        }
+    }
+
+    parser = DataParser()
+
+    # Should use total label when specified
+    total_label = parser._get_preferred_label(
+        concept_info,
+        'http://www.xbrl.org/2003/role/totalLabel'
+    )
+    assert total_label == 'Total Assets'
+
+    # Should fallback to standard label
+    std_label = parser._get_preferred_label(concept_info, None)
+    assert std_label == 'Assets'
 
 def test_data_transformation():
     """Test value transformation and formatting."""
@@ -164,10 +223,42 @@ def test_excel_generation():
 ```
 
 #### Integration Tests
+
 ```python
+def test_presentation_to_excel_pipeline():
+    """Test complete presentation-based pipeline."""
+    viewer_data = load_test_viewer_data()
+
+    # Parse using presentation structure
+    parser = DataParser()
+    result = parser.parse_viewer_data(viewer_data)
+
+    assert result.success
+    assert len(result.statements) == 3  # BS, IS, CF
+
+    # Verify balance sheet structure
+    balance_sheet = next(s for s in result.statements if 'balance' in s.name.lower())
+    assert balance_sheet.rows[0].label == "Assets:"  # First row is Assets header
+    assert balance_sheet.rows[0].is_abstract is True  # Headers are abstract
+    assert balance_sheet.rows[1].depth > 0  # Child rows are indented
+
+def test_tree_traversal_order():
+    """Test that tree traversal maintains presentation order."""
+    viewer_data = load_test_viewer_data()
+    parser = DataParser()
+    result = parser.parse_viewer_data(viewer_data)
+
+    # Get balance sheet rows
+    balance_sheet = next(s for s in result.statements if 'balance' in s.name.lower())
+    row_labels = [row.label for row in balance_sheet.rows]
+
+    # Verify expected order (Assets before Liabilities)
+    assets_index = next(i for i, label in enumerate(row_labels) if 'assets' in label.lower())
+    liabilities_index = next(i for i, label in enumerate(row_labels) if 'liabilities' in label.lower())
+    assert assets_index < liabilities_index
+
 def test_end_to_end_pipeline():
     """Test complete processing pipeline."""
-
     filing_url = TEST_FILINGS['apple_2023_10k']['url']
 
     # Run complete pipeline
@@ -183,7 +274,6 @@ def test_end_to_end_pipeline():
 
 def test_cli_interface():
     """Test command-line interface."""
-
     cmd = [
         'python', 'render_viewer_to_xlsx.py',
         '--filing', TEST_FILING_URL,
@@ -196,6 +286,7 @@ def test_cli_interface():
 ```
 
 ### Performance Tests
+
 ```python
 def test_processing_performance():
     """Verify processing completes within reasonable time."""
