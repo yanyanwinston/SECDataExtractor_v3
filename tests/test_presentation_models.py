@@ -299,6 +299,11 @@ class TestStatementRow:
         row.add_cell("2023", empty_cell)
         assert row.has_data() is False
 
+        # Placeholder dash should not count as data
+        dash_cell = Cell(value="—", raw_value=None, unit=None, decimals=None, period="2023")
+        row.add_cell("2023-dash", dash_cell)
+        assert row.has_data() is False
+
         # Cell with data
         data_cell = Cell(value="1,000", raw_value=1000.0, unit="usd", decimals=-3, period="2022")
         row.add_cell("2022", data_cell)

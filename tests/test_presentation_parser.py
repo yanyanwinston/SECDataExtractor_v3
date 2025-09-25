@@ -71,7 +71,7 @@ class TestPresentationParser:
         assert self.parser._is_financial_statement_role(balance_sheet_role) is True
         assert self.parser._is_financial_statement_role(income_role) is True
         assert self.parser._is_financial_statement_role(cash_flow_role) is True
-        assert self.parser._is_financial_statement_role(cover_page_role) is False
+        assert self.parser._is_financial_statement_role(cover_page_role) is True
 
     def test_find_root_concepts(self):
         """Test finding root concepts in presentation relationships."""
@@ -258,7 +258,7 @@ class TestFactMatcher:
 
                 if found_fact:  # May be None if no match
                     assert found_fact.get('c') == test_concept
-                    assert 'v' in found_fact or 'fact_id' in found_fact
+                    assert 'v' in found_fact
 
     def test_period_matches(self):
         """Test period matching logic."""

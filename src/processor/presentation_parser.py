@@ -69,13 +69,14 @@ class PresentationParser:
         return statements
 
     def _is_financial_statement_role(self, role_def: dict) -> bool:
-        """Check if this role represents a financial statement.
+        """Check if this role represents a presentation we should surface.
 
-        Args:
-            role_def: Role definition from roleDefs section
-
-        Returns:
-            True if this role represents a financial statement
+        Historically we filtered to traditional primary statements only. That
+        prevented us from exporting the document/cover page (and other
+        disclosures) even though the viewer JSON exposes full presentation
+        trees for them. Expand the keyword set so any role with a presentation
+        structure – including cover pages, disclosures, schedules, and tables –
+        is eligible for parsing.
         """
         label = (
             role_def.get('label')
@@ -84,16 +85,23 @@ class PresentationParser:
             or ''
         ).lower()
 
-        # Look for financial statement indicators in role label
-        financial_keywords = [
+        if not label:
+            return False
+
+        core_keywords = [
             'balance sheet', 'balance sheets',
-            'income statement', 'income statements',
-            'operations', 'comprehensive income',
+            'financial position',
+            'income statement', 'income statements', 'operations',
+            'comprehensive income',
             'cash flow', 'cash flows',
             'equity', 'stockholder', 'shareholder'
         ]
 
-        return any(keyword in label for keyword in financial_keywords)
+        supplemental_keywords = [
+            'document', 'cover', 'disclosure', 'tables', 'schedule', 'statement'
+        ]
+
+        return any(keyword in label for keyword in core_keywords + supplemental_keywords)
 
     def _parse_single_statement(
         self,

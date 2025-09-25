@@ -164,9 +164,23 @@ class FactMatcher:
 
                 # Check if period matches
                 if self._period_matches(period, context_data.get('p')):
-                    # Add fact_id to the context data for reference
+                    # Add fact_id to the context data for reference and enrich with value metadata
                     context_with_id = context_data.copy()
                     context_with_id['fact_id'] = fact_id
+
+                    # Values in the viewer JSON are typically stored at the fact root.
+                    # Propagate those onto the returned context so downstream consumers see them.
+                    if 'v' in fact_data and 'v' not in context_with_id:
+                        context_with_id['v'] = fact_data['v']
+                    if 'value' in fact_data and 'value' not in context_with_id:
+                        context_with_id['value'] = fact_data['value']
+                    if 'd' in fact_data and 'd' not in context_with_id:
+                        context_with_id['d'] = fact_data['d']
+                    if 'u' in fact_data and 'u' not in context_with_id:
+                        context_with_id['u'] = fact_data['u']
+                    if 'unit' in fact_data and 'unit' not in context_with_id:
+                        context_with_id['unit'] = fact_data['unit']
+
                     return context_with_id
 
         return None

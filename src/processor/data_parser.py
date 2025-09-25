@@ -9,7 +9,7 @@ from .data_models import Statement, Period, Row, Cell, ProcessingResult
 from .value_formatter import ValueFormatter
 from .presentation_parser import PresentationParser
 from .fact_matcher import FactMatcher
-from .presentation_models import StatementType
+from .presentation_models import StatementType, StatementTable
 
 
 logger = logging.getLogger(__name__)
@@ -183,22 +183,39 @@ class DataParser:
                 return self._parse_statements(viewer_data)
 
             # Match facts to presentation for each statement
-            statement_tables = []
+            primary_tables = []
+            supplemental_tables = []
+
             for pres_statement in presentation_statements:
-                if self._is_primary_statement(pres_statement):
-                    try:
-                        table = self.fact_matcher.match_facts_to_statement(
-                            pres_statement, facts, periods
+                try:
+                    table = self.fact_matcher.match_facts_to_statement(
+                        pres_statement, facts, periods
+                    )
+
+                    if not self._statement_table_has_data(table):
+                        logger.debug(
+                            "Statement %s has no fact data; skipping",
+                            pres_statement.statement_name
                         )
-                        statement_tables.append(table)
-                        logger.info(f"Matched facts for: {pres_statement.statement_name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to match facts for {pres_statement.statement_name}: {e}")
                         continue
 
+                    if self._is_primary_statement(pres_statement):
+                        primary_tables.append(table)
+                    else:
+                        supplemental_tables.append(table)
+
+                    logger.info(f"Matched facts for: {pres_statement.statement_name}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to match facts for {pres_statement.statement_name}: {e}"
+                    )
+                    continue
+
+            statement_tables = primary_tables + supplemental_tables
+
             if not statement_tables:
-                logger.warning("No primary statements produced; falling back to legacy parsing")
-                return self._parse_statements(viewer_data)
+                logger.info("Presentation statements contained no matchable fact data")
+                return []
 
             # Convert to existing Statement format for compatibility with Excel generator
             statements = self._convert_statement_tables_to_legacy_format(statement_tables)
@@ -227,6 +244,10 @@ class DataParser:
             StatementType.EQUITY
         }
         return statement.statement_type in primary_types
+
+    def _statement_table_has_data(self, table) -> bool:
+        """Determine whether a matched statement table contains any facts."""
+        return any(row.has_data() for row in table.rows)
 
     def _extract_periods_from_viewer_data(self, viewer_data: Dict[str, Any]) -> List[Period]:
         """Extract periods from viewer data using fact matcher.
@@ -281,7 +302,7 @@ class DataParser:
 
             return {}
 
-    def _convert_statement_tables_to_legacy_format(self, tables: List) -> List[Statement]:
+    def _convert_statement_tables_to_legacy_format(self, tables: List[StatementTable]) -> List[Statement]:
         """Convert StatementTable objects to legacy Statement format."""
 
         legacy_statements: List[Statement] = []

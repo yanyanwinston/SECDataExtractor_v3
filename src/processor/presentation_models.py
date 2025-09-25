@@ -192,11 +192,27 @@ class StatementRow:
         return self.cells.get(period_id)
 
     def has_data(self) -> bool:
-        """Check if this row has any non-empty cells."""
-        return any(
-            cell.value is not None and cell.value.strip() != ""
-            for cell in self.cells.values()
-        )
+        """Check if this row has any meaningful cell values."""
+        for cell in self.cells.values():
+            if cell is None:
+                continue
+
+            if cell.raw_value is not None:
+                return True
+
+            if cell.value is None:
+                continue
+
+            value_str = str(cell.value).strip()
+            if not value_str:
+                continue
+
+            if value_str == "—":
+                continue
+
+            return True
+
+        return False
 
     def __str__(self) -> str:
         """String representation of the row."""
