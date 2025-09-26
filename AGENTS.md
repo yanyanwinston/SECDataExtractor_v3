@@ -39,3 +39,4 @@
 - Phase 4 prep: Excel generator consumes the new tables; column header polish (calendar-aware labels) and quarterly vs annual configuration remain open—compare the TSLA workbook against `Financial_Report.xlsx` once headers are fixed.
 - Cover metadata: `DataParser` now reads company name, form type, and dates from viewer `sourceReports` before falling back to legacy `facts` / `meta` blocks.
 - Regression status: updated suites in `tests/test_presentation_parser.py`, `tests/test_integration_presentation.py`, and `tests/test_excel_generator.py` cover statement filtering, label toggles, scaling, and dimension expansion/collapse; live filing sweep plus period header assertions still pending before release tagging.
+- Active work: iterating on the TSLA end-to-end example (download → render) to harden throttling, artifact selection, and statement filtering before tagging the next release.
