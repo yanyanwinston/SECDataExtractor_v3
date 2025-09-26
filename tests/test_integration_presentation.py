@@ -127,3 +127,30 @@ def test_label_style_standard_switch(integration_viewer_data):
 
     assert terse_result.success and standard_result.success
     # Some fixtures may not differentiate label roles; ensure toggle executes without error.
+
+def _first_raw_value(result, concept: str):
+    for statement in result.statements:
+        for row in statement.rows:
+            if getattr(row, 'concept', None) == concept:
+                for cell in row.cells.values():
+                    if cell.raw_value is not None:
+                        return cell.raw_value
+    return None
+
+
+def test_scale_hint_affects_raw_values(integration_viewer_data):
+    parser_scaled = DataParser(ValueFormatter(scale_millions=False), use_scale_hint=True)
+    result_scaled = parser_scaled.parse_viewer_data(integration_viewer_data)
+
+    parser_unscaled = DataParser(ValueFormatter(scale_millions=False), use_scale_hint=False)
+    result_unscaled = parser_unscaled.parse_viewer_data(integration_viewer_data)
+
+    assert result_scaled.success and result_unscaled.success
+
+    concept = 'us-gaap:CashAndCashEquivalentsAtCarryingValue'
+    scaled_value = _first_raw_value(result_scaled, concept)
+    unscaled_value = _first_raw_value(result_unscaled, concept)
+
+    assert scaled_value is not None and unscaled_value is not None
+    assert scaled_value != unscaled_value
+    assert abs(unscaled_value) > abs(scaled_value)

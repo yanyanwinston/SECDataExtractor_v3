@@ -6,7 +6,8 @@ nodes, creating complete statement tables ready for Excel generation.
 """
 
 import logging
-from typing import List, Optional
+import math
+from typing import Any, List, Optional
 
 from .presentation_models import PresentationStatement, StatementTable, StatementRow
 from .data_models import Period, Cell
@@ -17,13 +18,14 @@ logger = logging.getLogger(__name__)
 class FactMatcher:
     """Match facts to presentation rows to create complete statement tables."""
 
-    def __init__(self, formatter=None):
+    def __init__(self, formatter=None, use_scale_hint: bool = True):
         """Initialize fact matcher.
 
         Args:
             formatter: Optional ValueFormatter for formatting cell values
         """
         self.formatter = formatter
+        self.use_scale_hint = use_scale_hint
 
     def match_facts_to_statement(self, statement: PresentationStatement,
                                 facts: dict, periods: List[Period]) -> StatementTable:
@@ -230,47 +232,114 @@ class FactMatcher:
             Cell object with formatted value
         """
         raw_value = fact.get('v')
-        unit = fact.get('u')
+        numeric_value: Optional[float] = None
+        if raw_value is not None:
+            try:
+                numeric_value = float(raw_value)
+            except (TypeError, ValueError):
+                numeric_value = None
+
+        unit = fact.get('u') or fact.get('unit')
         decimals = fact.get('d')
         concept = fact.get('c', '')
 
-        # Apply formatting if formatter is available
-        if self.formatter and raw_value is not None:
+        decimals_value = self._coerce_decimals(decimals)
+
+        scaled_numeric = numeric_value
+        scale_applied = False
+        if (
+            self.use_scale_hint
+            and numeric_value is not None
+            and decimals_value is not None
+            and decimals_value < 0
+        ):
             try:
-                formatted_value = self.formatter.format_cell_value(
-                    raw_value, unit, decimals, concept
+                scaled_numeric = numeric_value * (10 ** decimals_value)
+                scale_applied = True
+            except (TypeError, ValueError, OverflowError):
+                scaled_numeric = numeric_value
+                scale_applied = False
+
+        # Apply formatting if formatter is available
+        if self.formatter and scaled_numeric is not None:
+            try:
+                formatter_decimals: Optional[int]
+                if decimals_value is not None and decimals_value >= 0:
+                    formatter_decimals = decimals_value
+                else:
+                    formatter_decimals = None
+
+                formatted_value = self._format_with_scale_control(
+                    scaled_numeric,
+                    unit,
+                    formatter_decimals,
+                    concept,
+                    scale_applied
                 )
             except Exception as e:
                 logger.warning(f"Error formatting value {raw_value}: {e}")
-                formatted_value = str(raw_value)
+                formatted_value = str(scaled_numeric)
         else:
             # Basic formatting without formatter
-            if raw_value is not None:
-                if isinstance(raw_value, (int, float)):
-                    # Apply decimals scaling if present
-                    if decimals is not None and decimals < 0:
-                        # Negative decimals mean divide by 10^abs(decimals)
-                        scaled_value = raw_value / (10 ** abs(decimals))
+            if scaled_numeric is not None:
+                if isinstance(scaled_numeric, (int, float)):
+                    if scaled_numeric == int(scaled_numeric):
+                        formatted_value = f"{int(scaled_numeric):,}"
                     else:
-                        scaled_value = raw_value
-
-                    # Basic number formatting
-                    if scaled_value == int(scaled_value):
-                        formatted_value = f"{int(scaled_value):,}"
-                    else:
-                        formatted_value = f"{scaled_value:,.2f}"
+                        formatted_value = f"{scaled_numeric:,.2f}"
                 else:
-                    formatted_value = str(raw_value)
+                    formatted_value = str(scaled_numeric)
             else:
                 formatted_value = "—"
 
         return Cell(
             value=formatted_value,
-            raw_value=raw_value,
+            raw_value=scaled_numeric if scaled_numeric is not None else raw_value,
             unit=unit,
             decimals=decimals,
             period=period.label
         )
+
+    def _format_with_scale_control(
+        self,
+        value: float,
+        unit: Optional[str],
+        decimals: Optional[int],
+        concept: str,
+        scale_applied: bool
+    ) -> str:
+        """Format a numeric value while preventing double scaling when hints are applied."""
+        if not self.use_scale_hint or not getattr(self.formatter, 'scale_millions', False):
+            return self.formatter.format_cell_value(value, unit, decimals, concept)
+
+        if not scale_applied:
+            return self.formatter.format_cell_value(value, unit, decimals, concept)
+
+        original_scale = self.formatter.scale_millions
+        try:
+            self.formatter.scale_millions = False
+            return self.formatter.format_cell_value(value, unit, decimals, concept)
+        finally:
+            self.formatter.scale_millions = original_scale
+
+    @staticmethod
+    def _coerce_decimals(decimals: Any) -> Optional[int]:
+        """Convert XBRL decimals metadata into an integer when possible."""
+        if isinstance(decimals, bool):  # bool is a subclass of int
+            return int(decimals)
+
+        if isinstance(decimals, (int, float)):
+            if isinstance(decimals, float) and (math.isnan(decimals) or math.isinf(decimals)):
+                return None
+            return int(decimals)
+
+        if isinstance(decimals, str):
+            try:
+                return int(decimals)
+            except ValueError:
+                return None
+
+        return None
 
     def _format_period_label(self, date_str: str) -> str:
         """Format period date string for display.

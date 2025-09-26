@@ -23,7 +23,8 @@ class DataParser:
         self,
         formatter: Optional[ValueFormatter] = None,
         include_disclosures: bool = False,
-        label_style: str = 'terse'
+        label_style: str = 'terse',
+        use_scale_hint: bool = True
     ):
         """
         Initialize data parser.
@@ -34,7 +35,7 @@ class DataParser:
         """
         self.formatter = formatter or ValueFormatter()
         self.presentation_parser = PresentationParser(label_style=label_style)
-        self.fact_matcher = FactMatcher(self.formatter)
+        self.fact_matcher = FactMatcher(self.formatter, use_scale_hint=use_scale_hint)
         self.include_disclosures = include_disclosures
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:

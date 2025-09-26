@@ -286,11 +286,27 @@ class TestFactMatcher:
 
         cell = self.fact_matcher._create_cell_from_fact(test_fact, period)
 
-        assert cell.raw_value == 29965000000
+        assert cell.raw_value == 29965.0
         assert cell.unit == 'usd'
         assert cell.decimals == -6
         assert cell.period == period.label
         assert cell.value  # Should have some formatted value
+
+    def test_scale_hint_skips_positive_decimals(self):
+        """Ensure positive decimal metadata does not trigger scaling."""
+        test_fact = {
+            'c': 'custom:RatioMetric',
+            'v': 0.1234,
+            'u': None,
+            'd': 4,
+            'p': '2023-09-30'
+        }
+
+        period = Period(label="2023", end_date="2023-09-30", instant=False)
+        cell = self.fact_matcher._create_cell_from_fact(test_fact, period)
+
+        assert cell.raw_value == pytest.approx(0.1234)
+        assert cell.value
 
     def test_format_period_label(self):
         """Test period label formatting."""
@@ -336,6 +352,7 @@ class TestFactMatcher:
         mock_formatter = Mock()
         mock_formatter.format_cell_value.return_value = "1,000.0"
 
+        mock_formatter.scale_millions = False
         fact_matcher = FactMatcher(formatter=mock_formatter)
 
         test_fact = {

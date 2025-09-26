@@ -134,6 +134,12 @@ Examples:
     )
 
     parser.add_argument(
+        '--no-scale-hint',
+        action='store_true',
+        help='Ignore XBRL decimals when scaling numeric values'
+    )
+
+    parser.add_argument(
         '--save-viewer-json',
         type=Path,
         help='Write the extracted viewer JSON payload to disk'
@@ -323,7 +329,8 @@ def process_filing(args) -> None:
         data_parser = DataParser(
             formatter,
             include_disclosures=args.include_disclosures,
-            label_style=args.label_style
+            label_style=args.label_style,
+            use_scale_hint=not args.no_scale_hint
         )
         result = data_parser.parse_viewer_data(viewer_data)
 
