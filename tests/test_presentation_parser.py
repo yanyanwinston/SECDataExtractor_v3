@@ -582,6 +582,98 @@ class TestFactMatcher:
         assert energy_row.cells['FY24'].raw_value == 400.0
         assert energy_row.cells['FY23'].raw_value == 400.0
 
+    def test_dimension_rows_collapsed_when_disabled(self):
+        """Collapse mode should keep a single row despite dimensional facts."""
+        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+
+        fact_matcher = FactMatcher(expand_dimensions=False)
+
+        revenue_node = PresentationNode(
+            concept='us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+            label='Revenue',
+            order=5,
+            depth=2,
+            abstract=False,
+        )
+
+        line_items = PresentationNode(
+            concept='us-gaap:StatementLineItems',
+            label='Statement [Line Items]',
+            order=1,
+            depth=1,
+            abstract=False,
+            children=[revenue_node],
+        )
+
+        product_axis = PresentationNode(
+            concept='srt:ProductOrServiceAxis',
+            label='Product and Service [Axis]',
+            order=0,
+            depth=1,
+            abstract=False,
+        )
+
+        table_node = PresentationNode(
+            concept='us-gaap:StatementTable',
+            label='Statement [Table]',
+            order=0,
+            depth=0,
+            abstract=False,
+            children=[product_axis, line_items],
+        )
+
+        root = PresentationNode(
+            concept='us-gaap:IncomeStatementAbstract',
+            label='Income Statement [Abstract]',
+            order=0,
+            depth=0,
+            abstract=True,
+            children=[table_node],
+        )
+
+        statement = PresentationStatement(
+            role_uri='uri',
+            role_id='ns20',
+            statement_name='Consolidated Statements of Operations',
+            statement_type=StatementType.INCOME_STATEMENT,
+            root_nodes=[root],
+        )
+
+        periods = [
+            Period(label='FY24', end_date='2024-12-31', instant=False),
+            Period(label='FY23', end_date='2023-12-31', instant=False),
+        ]
+
+        facts = {
+            'f-base': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2024-01-01/2024-12-31',
+                },
+                'v': 1000.0,
+                'd': 0,
+            },
+            'f-dim': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2024-01-01/2024-12-31',
+                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+                },
+                'v': 600.0,
+                'd': 0,
+            },
+        }
+
+        table_result = fact_matcher.match_facts_to_statement(statement, facts, periods)
+
+        revenue_rows = [
+            row for row in table_result.rows
+            if row.concept == 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+        ]
+
+        assert len(revenue_rows) == 1
+        assert revenue_rows[0].label == 'Revenue'
+
     def test_format_period_label(self):
         """Test period label formatting."""
         test_cases = [

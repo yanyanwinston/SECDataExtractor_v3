@@ -41,5 +41,5 @@
 
 ## Next Steps
 1. ✅ `FactMatcher` now groups line-item facts by the axes present in the statement, emits one row per member (indented beneath the parent), and labels them using the MetaLinks member names.
-2. ❑ Review whether we need configuration switches to limit expansion (e.g., keep equity component rows, but maybe skip low-signal axes on disclosures).
+2. ✅ CLI now exposes `--dimension-breakdown` / `--collapse-dimensions`, letting us flip between granular and collapsed output without another code change.
 3. ✅ Unit test coverage (`test_dimension_rows_expanded`) asserts the breakout rows are generated with the correct fact values; rerunning the TSLA workbook now shows automotive sales / regulatory credits / leasing plus equivalent cost-of-revenue splits.

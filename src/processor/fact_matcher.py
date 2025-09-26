@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 class FactMatcher:
     """Match facts to presentation rows to create complete statement tables."""
 
-    def __init__(self, formatter=None, use_scale_hint: bool = True):
+    def __init__(
+        self,
+        formatter=None,
+        use_scale_hint: bool = True,
+        expand_dimensions: bool = True,
+    ):
         """Initialize fact matcher.
 
         Args:
@@ -31,6 +36,7 @@ class FactMatcher:
         """
         self.formatter = formatter
         self.use_scale_hint = use_scale_hint
+        self.expand_dimensions = expand_dimensions
         self.concept_labels: Dict[str, Dict[str, str]] = {}
 
     def update_concept_labels(self, labels: Optional[Dict[str, Dict[str, str]]]) -> None:
@@ -56,7 +62,11 @@ class FactMatcher:
         # Track display depth per structural level so we can collapse axis/table/domain nodes
         display_depth_by_level: Dict[int, int] = {}
 
-        axis_metadata = self._extract_axis_metadata(statement)
+        axis_metadata = (
+            self._extract_axis_metadata(statement)
+            if self.expand_dimensions
+            else {}
+        )
         concept_context_cache: Dict[str, List[dict]] = {}
 
         # Flatten presentation tree to get all rows in presentation order
@@ -76,16 +86,16 @@ class FactMatcher:
             display_depth = max(parent_display_depth + 1, 0)
             display_depth_by_level[depth] = display_depth
 
-            generated_rows = self._generate_rows_for_node(
-                node,
-                display_depth,
-                periods,
-                facts,
-                axis_metadata,
-                concept_context_cache
+            rows.extend(
+                self._generate_rows_for_node(
+                    node,
+                    display_depth,
+                    periods,
+                    facts,
+                    axis_metadata,
+                    concept_context_cache,
+                )
             )
-
-            rows.extend(generated_rows)
 
         logger.debug(f"Created {len(rows)} rows for statement")
 
@@ -111,6 +121,11 @@ class FactMatcher:
         if not concept:
             clone = self._clone_node(node, depth=display_depth)
             return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+
+        if not self.expand_dimensions:
+            clone = self._clone_node(node, depth=display_depth)
+            cells = self._build_cells_without_dimensions(concept, periods, facts)
+            return [StatementRow(node=clone, cells=cells)]
 
         fact_groups = self._group_facts_by_dimensions(
             concept,
@@ -261,6 +276,32 @@ class FactMatcher:
             context = self._select_context_for_period(context_list, period)
             if context:
                 cell = self._create_cell_from_fact(context, period)
+            else:
+                cell = Cell(
+                    value="—",
+                    raw_value=None,
+                    unit=None,
+                    decimals=None,
+                    period=period.label,
+                )
+            cells[period.label] = cell
+
+        return cells
+
+    def _build_cells_without_dimensions(
+        self,
+        concept: str,
+        periods: List[Period],
+        facts: dict,
+    ) -> Dict[str, Cell]:
+        """Create cells by matching concept/period only (no dimension breakdown)."""
+
+        cells: Dict[str, Cell] = {}
+
+        for period in periods:
+            fact = self._find_fact_for_concept_and_period(concept, period, facts)
+            if fact:
+                cell = self._create_cell_from_fact(fact, period)
             else:
                 cell = Cell(
                     value="—",

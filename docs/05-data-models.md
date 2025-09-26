@@ -196,6 +196,7 @@ def process_filing(args) -> None:
         include_disclosures=args.include_disclosures,
         label_style=args.label_style,
         use_scale_hint=not args.no_scale_hint,
+        expand_dimensions=args.expand_dimensions,
     )
     result = data_parser.parse_viewer_data(viewer_data)
 
@@ -221,6 +222,7 @@ def process_filing(args) -> None:
 - **Presentation Order**: Maintains the exact row order from the presentation linkbase
 - **Hierarchical Structure**: Preserves indentation levels and section headers
 - **Flexible Naming**: Handles various statement naming conventions automatically
+- **Dimensional Breakdown**: Optional axis/member expansion surfaces product, geography, or equity components when available (toggle via CLI)
 
 ### Value Formatting
 - Integrates with `ValueFormatter` for consistent number presentation

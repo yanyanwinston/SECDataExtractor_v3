@@ -80,6 +80,7 @@ python render_viewer_to_xlsx.py \
   [--periods <PERIOD_LIST>] \
   [--currency <CURRENCY>] \
   [--scale-millions | --scale-none] \
+  [--dimension-breakdown | --collapse-dimensions] \
   [--include-disclosures] \
   [--label-style {terse,standard}] \
   [--dump-role-map <CSV>] \
@@ -182,6 +183,12 @@ Explicitly enable scaling to millions (default behavior).
 # Show raw values
 --scale-none
 ```
+
+#### `--dimension-breakdown`
+Expand dimensional data into additional rows (default). When a concept carries axis/member facts—for example, Tesla’s automotive versus energy revenue mix—the workbook shows one row per member, indented beneath the parent line item.
+
+#### `--collapse-dimensions`
+Collapse dimensional facts into their parent line item, restoring the pre-expansion behaviour.
 
 #### `--include-disclosures`
 Include disclosure/detail presentation roles in addition to the primary statements. Useful when you need the narrative notes or tables that accompany the core financials.
@@ -320,6 +327,21 @@ Examples:
         default='terse',
         help='Preferred concept label style for Excel output (default: terse)'
     )
+
+    dimension_group = parser.add_mutually_exclusive_group()
+    dimension_group.add_argument(
+        '--dimension-breakdown',
+        dest='expand_dimensions',
+        action='store_true',
+        help='Expand axis/member dimensions into separate rows (default)'
+    )
+    dimension_group.add_argument(
+        '--collapse-dimensions',
+        dest='expand_dimensions',
+        action='store_false',
+        help='Collapse dimensional facts into their parent line items'
+    )
+    parser.set_defaults(expand_dimensions=True)
 
     parser.add_argument(
         '--no-scale-hint',

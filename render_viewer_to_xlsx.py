@@ -133,6 +133,21 @@ Examples:
         help='Preferred concept label style for Excel output (default: terse)'
     )
 
+    dimension_group = parser.add_mutually_exclusive_group()
+    dimension_group.add_argument(
+        '--dimension-breakdown',
+        dest='expand_dimensions',
+        action='store_true',
+        help='Expand axis/member dimensions into separate rows (default)'
+    )
+    dimension_group.add_argument(
+        '--collapse-dimensions',
+        dest='expand_dimensions',
+        action='store_false',
+        help='Collapse dimensional facts into their parent line items'
+    )
+    parser.set_defaults(expand_dimensions=True)
+
     parser.add_argument(
         '--no-scale-hint',
         action='store_true',
@@ -330,7 +345,8 @@ def process_filing(args) -> None:
             formatter,
             include_disclosures=args.include_disclosures,
             label_style=args.label_style,
-            use_scale_hint=not args.no_scale_hint
+            use_scale_hint=not args.no_scale_hint,
+            expand_dimensions=args.expand_dimensions,
         )
         result = data_parser.parse_viewer_data(viewer_data)
 

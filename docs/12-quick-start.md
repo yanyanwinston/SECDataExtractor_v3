@@ -232,6 +232,7 @@ python render_viewer_to_xlsx.py \
   --periods "2023,2022" \
   --currency USD \
   --label-style standard \
+  --dimension-breakdown \
   --save-viewer-json output/custom-viewer.json \
   --one-period
 
@@ -240,7 +241,8 @@ python render_viewer_to_xlsx.py \
   --filing downloaded-filing.htm \
   --out custom-format-raw.xlsx \
   --no-scale-hint \
-  --scale-none
+  --scale-none \
+  --collapse-dimensions
 ```
 
 ## Troubleshooting
