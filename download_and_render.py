@@ -30,7 +30,7 @@ def setup_logging(verbose: bool) -> None:
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()]
+        handlers=[logging.StreamHandler()],
     )
 
     if not verbose:
@@ -43,9 +43,7 @@ def read_identifier_file(file_path: Path) -> List[str]:
     """Read ticker/CIK identifiers from a file."""
     with file_path.open("r", encoding="utf-8") as handle:
         return [
-            line.strip()
-            for line in handle
-            if line.strip() and not line.startswith("#")
+            line.strip() for line in handle if line.strip() and not line.startswith("#")
         ]
 
 
@@ -55,63 +53,138 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
 
     identifier_group = parser.add_mutually_exclusive_group(required=True)
-    identifier_group.add_argument("--ticker", action="append", help="Ticker symbol to process (can be repeated)")
-    identifier_group.add_argument("--cik", action="append", help="CIK to process (can be repeated)")
-    identifier_group.add_argument("--input-file", type=Path, help="File with one ticker/CIK per line")
+    identifier_group.add_argument(
+        "--ticker", action="append", help="Ticker symbol to process (can be repeated)"
+    )
+    identifier_group.add_argument(
+        "--cik", action="append", help="CIK to process (can be repeated)"
+    )
+    identifier_group.add_argument(
+        "--input-file", type=Path, help="File with one ticker/CIK per line"
+    )
 
-    parser.add_argument("--k-count", type=int, default=5, help="Number of 10-K filings to download (default: 5)")
-    parser.add_argument("--q-count", type=int, default=10, help="Number of 10-Q filings to download (default: 10)")
-    parser.add_argument("--include-amendments", action="store_true", help="Include /A amendment filings")
-    parser.add_argument("--start-date", type=str, help="Earliest filing date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--k-count",
+        type=int,
+        default=5,
+        help="Number of 10-K filings to download (default: 5)",
+    )
+    parser.add_argument(
+        "--q-count",
+        type=int,
+        default=10,
+        help="Number of 10-Q filings to download (default: 10)",
+    )
+    parser.add_argument(
+        "--include-amendments", action="store_true", help="Include /A amendment filings"
+    )
+    parser.add_argument(
+        "--start-date", type=str, help="Earliest filing date (YYYY-MM-DD)"
+    )
     parser.add_argument("--end-date", type=str, help="Latest filing date (YYYY-MM-DD)")
 
     parser.add_argument(
         "--download-dir",
         type=Path,
         default=Path("./downloads"),
-        help="Directory for downloaded filings (default: ./downloads)"
+        help="Directory for downloaded filings (default: ./downloads)",
     )
     parser.add_argument(
         "--excel-dir",
         type=Path,
         default=Path("./output"),
-        help="Directory for generated Excel files (default: ./output)"
+        help="Directory for generated Excel files (default: ./output)",
     )
-    parser.add_argument("--max-parallel", type=int, default=3, help="Parallel downloads (default: 3)")
-    parser.add_argument("--download-timeout", type=int, default=30, help="Download timeout in seconds (default: 30)")
-    parser.add_argument("--retries", type=int, default=3, help="Retry attempts for failed downloads (default: 3)")
+    parser.add_argument(
+        "--max-parallel", type=int, default=3, help="Parallel downloads (default: 3)"
+    )
+    parser.add_argument(
+        "--download-timeout",
+        type=int,
+        default=30,
+        help="Download timeout in seconds (default: 30)",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        help="Retry attempts for failed downloads (default: 3)",
+    )
     parser.add_argument(
         "--exhibits",
         choices=["include", "exclude"],
         default=None,
-        help="Include or exclude exhibit files (default: exclude)"
+        help="Include or exclude exhibit files (default: exclude)",
     )
     parser.add_argument(
-        "--include-exhibits",
-        action="store_true",
-        default=False,
-        help=argparse.SUPPRESS
+        "--include-exhibits", action="store_true", default=False, help=argparse.SUPPRESS
     )
-    parser.add_argument("--skip-verify", action="store_true", help="Skip download integrity checks")
+    parser.add_argument(
+        "--skip-verify", action="store_true", help="Skip download integrity checks"
+    )
 
-    parser.add_argument("--label-style", choices=["terse", "standard"], default="terse", help="Excel label style")
-    parser.add_argument("--collapse-dimensions", action="store_true", help="Collapse dimensional facts in Excel")
-    parser.add_argument("--include-disclosures", action="store_true", help="Include disclosure roles in Excel output")
-    parser.add_argument("--currency", default="USD", help="Currency code for display (default: USD)")
-    parser.add_argument("--scale-none", action="store_true", help="Display raw values without scaling")
-    parser.add_argument("--no-scale-hint", action="store_true", help="Ignore XBRL decimals when scaling")
-    parser.add_argument("--one-period", action="store_true", help="Limit Excel output to the most recent period")
-    parser.add_argument("--periods", help="Comma separated list of periods to include in Excel output")
-    parser.add_argument("--render-timeout", type=int, default=300, help="Arelle processing timeout (default: 300)")
-    parser.add_argument("--render-temp-dir", type=Path, help="Custom temp directory for Arelle processing")
-    parser.add_argument("--keep-temp", action="store_true", help="Preserve temporary render artifacts")
-    parser.add_argument("--dump-role-map", type=Path, help="Write MetaLinks role metadata to CSV")
-    parser.add_argument("--save-viewer-json", type=Path, help="Persist extracted viewer JSON for inspection")
+    parser.add_argument(
+        "--label-style",
+        choices=["terse", "standard"],
+        default="terse",
+        help="Excel label style",
+    )
+    parser.add_argument(
+        "--collapse-dimensions",
+        action="store_true",
+        help="Collapse dimensional facts in Excel",
+    )
+    parser.add_argument(
+        "--include-disclosures",
+        action="store_true",
+        help="Include disclosure roles in Excel output",
+    )
+    parser.add_argument(
+        "--currency", default="USD", help="Currency code for display (default: USD)"
+    )
+    parser.add_argument(
+        "--scale-none", action="store_true", help="Display raw values without scaling"
+    )
+    parser.add_argument(
+        "--no-scale-hint", action="store_true", help="Ignore XBRL decimals when scaling"
+    )
+    parser.add_argument(
+        "--one-period",
+        action="store_true",
+        help="Limit Excel output to the most recent period",
+    )
+    parser.add_argument(
+        "--periods", help="Comma separated list of periods to include in Excel output"
+    )
+    parser.add_argument(
+        "--render-timeout",
+        type=int,
+        default=300,
+        help="Arelle processing timeout (default: 300)",
+    )
+    parser.add_argument(
+        "--render-temp-dir",
+        type=Path,
+        help="Custom temp directory for Arelle processing",
+    )
+    parser.add_argument(
+        "--keep-temp", action="store_true", help="Preserve temporary render artifacts"
+    )
+    parser.add_argument(
+        "--dump-role-map", type=Path, help="Write MetaLinks role metadata to CSV"
+    )
+    parser.add_argument(
+        "--save-viewer-json",
+        type=Path,
+        help="Persist extracted viewer JSON for inspection",
+    )
 
     parser.add_argument("--quiet", action="store_true", help="Reduce console output")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
 
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing Excel files")
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing Excel files"
+    )
 
     return parser.parse_args(argv)
 
@@ -162,7 +235,7 @@ def make_render_namespace(
     filing_input: Path,
     output_path: Path,
     args: argparse.Namespace,
-    meta_links_candidates: Optional[List[Path]] = None
+    meta_links_candidates: Optional[List[Path]] = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         filing=str(filing_input),
@@ -182,7 +255,11 @@ def make_render_namespace(
         temp_dir=args.render_temp_dir,
         keep_temp=args.keep_temp,
         timeout=args.render_timeout,
-        meta_links_candidates=[str(path) for path in meta_links_candidates] if meta_links_candidates else None
+        meta_links_candidates=(
+            [str(path) for path in meta_links_candidates]
+            if meta_links_candidates
+            else None
+        ),
     )
 
 
@@ -248,8 +325,16 @@ def build_excel_path(base_dir: Path, filing: Filing) -> Path:
     ticker = filing.ticker or f"CIK_{filing.cik}"
     accession_number = getattr(filing, "accession_number", "") or ""
     accession = filing.accession_clean or accession_number.replace("-", "")
-    date_str = filing.report_date.strftime("%Y-%m-%d") if filing.report_date else filing.filing_date.strftime("%Y-%m-%d")
-    file_name = f"{filing.form_type}_{date_str}_{accession}.xlsx" if accession else f"{filing.form_type}_{date_str}.xlsx"
+    date_str = (
+        filing.report_date.strftime("%Y-%m-%d")
+        if filing.report_date
+        else filing.filing_date.strftime("%Y-%m-%d")
+    )
+    file_name = (
+        f"{filing.form_type}_{date_str}_{accession}.xlsx"
+        if accession
+        else f"{filing.form_type}_{date_str}.xlsx"
+    )
     return base_dir / ticker / file_name
 
 
@@ -259,7 +344,7 @@ def collect_filings_for_identifier(
     form_requests: Iterable[Tuple[str, int]],
     include_amendments: bool,
     start_date: Optional[datetime],
-    end_date: Optional[datetime]
+    end_date: Optional[datetime],
 ) -> List[Filing]:
     filings: List[Filing] = []
     for form_type, count in form_requests:
@@ -268,13 +353,15 @@ def collect_filings_for_identifier(
             start_date=None,
             end_date=None,
             include_amendments=include_amendments,
-            max_results=count
+            max_results=count,
         )
 
         filters.start_date = start_date
         filters.end_date = end_date
 
-        logger.info("Searching %s filings for %s (limit %s)", form_type, identifier, count)
+        logger.info(
+            "Searching %s filings for %s (limit %s)", form_type, identifier, count
+        )
         try:
             matches = search.search(identifier, filters)
         except Exception as exc:
@@ -297,7 +384,7 @@ def download_filings_for_identifier(
     filings: List[Filing],
     downloader: FilingDownload,
     config: DownloadConfig,
-    quiet: bool
+    quiet: bool,
 ) -> List[DownloadResult]:
     if not filings:
         logger.warning("Skipping download for %s (no filings requested)", identifier)
@@ -309,14 +396,18 @@ def download_filings_for_identifier(
     return downloader.download_filings(filings, config, show_progress=not quiet)
 
 
-def render_downloaded_filings(results: List[DownloadResult], args: argparse.Namespace) -> Dict[str, Path]:
+def render_downloaded_filings(
+    results: List[DownloadResult], args: argparse.Namespace
+) -> Dict[str, Path]:
     generated_files: Dict[str, Path] = {}
 
     for result in results:
         filing = result.filing
 
         if not result.success:
-            logger.error("Download failed for %s: %s", filing.display_name, result.error)
+            logger.error(
+                "Download failed for %s: %s", filing.display_name, result.error
+            )
             continue
 
         input_path = determine_filing_input(result)
@@ -328,38 +419,44 @@ def render_downloaded_filings(results: List[DownloadResult], args: argparse.Name
         excel_path.parent.mkdir(parents=True, exist_ok=True)
 
         if excel_path.exists() and not args.overwrite:
-            logger.info("Excel already exists for %s; skipping (use --overwrite to regenerate)", filing.display_name)
+            logger.info(
+                "Excel already exists for %s; skipping (use --overwrite to regenerate)",
+                filing.display_name,
+            )
             generated_files[filing.display_name] = excel_path
             continue
 
         meta_candidates: List[Path] = []
         if result.local_path:
             base_dir = result.local_path
-            meta_candidates.extend([
-                base_dir / "MetaLinks.json",
-                base_dir / "metalink.json",
-                base_dir / "metalinks.json",
-            ])
-            meta_candidates.extend([
-                base_dir / "ixviewer" / "MetaLinks.json",
-                base_dir / "ixviewer" / "metalink.json",
-                base_dir / "ixviewer" / "metalinks.json",
-            ])
+            meta_candidates.extend(
+                [
+                    base_dir / "MetaLinks.json",
+                    base_dir / "metalink.json",
+                    base_dir / "metalinks.json",
+                ]
+            )
+            meta_candidates.extend(
+                [
+                    base_dir / "ixviewer" / "MetaLinks.json",
+                    base_dir / "ixviewer" / "metalink.json",
+                    base_dir / "ixviewer" / "metalinks.json",
+                ]
+            )
 
         meta_filtered = [path for path in meta_candidates if path.exists()]
 
         render_args = make_render_namespace(
-            input_path,
-            excel_path,
-            args,
-            meta_links_candidates=meta_filtered
+            input_path, excel_path, args, meta_links_candidates=meta_filtered
         )
 
         try:
             renderer.validate_arguments(render_args)
             renderer.process_filing(render_args)
         except SystemExit as exc:
-            logger.error("Rendering aborted for %s (exit code %s)", filing.display_name, exc.code)
+            logger.error(
+                "Rendering aborted for %s (exit code %s)", filing.display_name, exc.code
+            )
             continue
         except Exception as exc:
             logger.error("Rendering failed for %s: %s", filing.display_name, exc)
@@ -420,7 +517,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_parallel=args.max_parallel,
         retry_attempts=args.retries,
         timeout_seconds=args.download_timeout,
-        verify_downloads=not args.skip_verify
+        verify_downloads=not args.skip_verify,
     )
 
     overall_generated: Dict[str, Path] = {}
@@ -432,14 +529,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             form_requests,
             args.include_amendments,
             start_date,
-            end_date
+            end_date,
         )
 
         if not filings:
             logger.warning("No filings matched criteria for %s", identifier)
             continue
 
-        results = download_filings_for_identifier(identifier, filings, downloader, download_config, args.quiet)
+        results = download_filings_for_identifier(
+            identifier, filings, downloader, download_config, args.quiet
+        )
         generated = render_downloaded_filings(results, args)
         overall_generated.update(generated)
 

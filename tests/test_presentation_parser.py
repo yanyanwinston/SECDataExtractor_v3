@@ -23,26 +23,34 @@ class TestPresentationParser:
     @classmethod
     def setup_class(cls):
         """Load test fixtures."""
-        fixtures_path = Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
-        with open(fixtures_path, 'r') as f:
+        fixtures_path = (
+            Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
+        )
+        with open(fixtures_path, "r") as f:
             cls.fixtures = json.load(f)
 
         # Create mock viewer JSON structure
         cls.mock_viewer_json = {
-            "sourceReports": [{
-                "targetReports": [{
-                    "roleDefs": cls.fixtures["role_definitions"]["data"],
-                    "rels": {
-                        "pres": {
-                            "ns9": cls.fixtures["presentation_relationships"]["data"]["relationships"]
+            "sourceReports": [
+                {
+                    "targetReports": [
+                        {
+                            "roleDefs": cls.fixtures["role_definitions"]["data"],
+                            "rels": {
+                                "pres": {
+                                    "ns9": cls.fixtures["presentation_relationships"][
+                                        "data"
+                                    ]["relationships"]
+                                }
+                            },
+                            "facts": cls.fixtures["sample_facts"]["data"],
+                            "concepts": cls.fixtures["sample_concepts"]["data"],
+                            "target": {"some": "metadata"},
+                            "localDocs": {},
                         }
-                    },
-                    "facts": cls.fixtures["sample_facts"]["data"],
-                    "concepts": cls.fixtures["sample_concepts"]["data"],
-                    "target": {"some": "metadata"},
-                    "localDocs": {}
-                }]
-            }]
+                    ]
+                }
+            ]
         }
 
         cls.parser = PresentationParser()
@@ -54,7 +62,9 @@ class TestPresentationParser:
         assert len(statements) > 0
 
         # Should identify Balance Sheet statement
-        balance_sheet = next((s for s in statements if 'BALANCE' in s.statement_name.upper()), None)
+        balance_sheet = next(
+            (s for s in statements if "BALANCE" in s.statement_name.upper()), None
+        )
         assert balance_sheet is not None
         assert balance_sheet.statement_type == StatementType.BALANCE_SHEET
         assert balance_sheet.role_id == "ns9"
@@ -64,8 +74,12 @@ class TestPresentationParser:
         """Test identifying financial statement roles."""
         # Test various role types
         balance_sheet_role = {"en": "0000005 - Statement - CONSOLIDATED BALANCE SHEETS"}
-        income_role = {"en": "0000013 - Statement - CONSOLIDATED STATEMENTS OF OPERATIONS"}
-        cash_flow_role = {"en": "0000011 - Statement - CONSOLIDATED STATEMENTS OF CASH FLOWS"}
+        income_role = {
+            "en": "0000013 - Statement - CONSOLIDATED STATEMENTS OF OPERATIONS"
+        }
+        cash_flow_role = {
+            "en": "0000011 - Statement - CONSOLIDATED STATEMENTS OF CASH FLOWS"
+        }
         cover_page_role = {"en": "0000001 - Document - Cover Page"}
 
         assert self.parser._is_financial_statement_role(balance_sheet_role) is True
@@ -80,7 +94,9 @@ class TestPresentationParser:
 
         # Build tree for root concept
         root_concept = "us-gaap:StatementOfFinancialPositionAbstract"
-        tree = self.parser._build_presentation_tree(root_concept, role_data, concepts, depth=0)
+        tree = self.parser._build_presentation_tree(
+            root_concept, role_data, concepts, depth=0
+        )
 
         assert tree.concept == root_concept
         assert tree.depth == 0
@@ -106,19 +122,21 @@ class TestPresentationParser:
 
         # Prefer terse label when available
         custom_concepts = {
-            'custom:Example': {
-                'labels': {
-                    'terseLabel': {'en-us': 'Terse Example'},
-                    'std': {'en-us': 'Standard Example'}
+            "custom:Example": {
+                "labels": {
+                    "terseLabel": {"en-us": "Terse Example"},
+                    "std": {"en-us": "Standard Example"},
                 }
             }
         }
-        terse_label = self.parser._get_concept_label('custom:Example', custom_concepts)
-        assert terse_label == 'Terse Example'
+        terse_label = self.parser._get_concept_label("custom:Example", custom_concepts)
+        assert terse_label == "Terse Example"
 
-        standard_parser = PresentationParser(label_style='standard')
-        standard_label = standard_parser._get_concept_label('custom:Example', custom_concepts)
-        assert standard_label == 'Standard Example'
+        standard_parser = PresentationParser(label_style="standard")
+        standard_label = standard_parser._get_concept_label(
+            "custom:Example", custom_concepts
+        )
+        assert standard_label == "Standard Example"
 
         # Test concept not in definitions (should get humanized name)
         missing_concept = "us-gaap:MissingConceptExample"
@@ -145,7 +163,7 @@ class TestPresentationParser:
             ("us-gaap:CashAndCashEquivalents", "Cash And Cash Equivalents"),
             ("us-gaap:Assets", "Assets"),
             ("dei:EntityRegistrantName", "Entity Registrant Name"),
-            ("SimpleConceptName", "Simple Concept Name")
+            ("SimpleConceptName", "Simple Concept Name"),
         ]
 
         for concept, expected in test_cases:
@@ -155,10 +173,16 @@ class TestPresentationParser:
     def test_extract_statement_name(self):
         """Test extracting clean statement names from role labels."""
         test_cases = [
-            ("0000005 - Statement - CONSOLIDATED BALANCE SHEETS", "CONSOLIDATED BALANCE SHEETS"),
-            ("0000013 - Statement - CONSOLIDATED STATEMENTS OF OPERATIONS", "CONSOLIDATED STATEMENTS OF OPERATIONS"),
+            (
+                "0000005 - Statement - CONSOLIDATED BALANCE SHEETS",
+                "CONSOLIDATED BALANCE SHEETS",
+            ),
+            (
+                "0000013 - Statement - CONSOLIDATED STATEMENTS OF OPERATIONS",
+                "CONSOLIDATED STATEMENTS OF OPERATIONS",
+            ),
             ("CONSOLIDATED BALANCE SHEETS", "CONSOLIDATED BALANCE SHEETS"),
-            ("", "Financial Statement")
+            ("", "Financial Statement"),
         ]
 
         for role_label, expected in test_cases:
@@ -172,7 +196,9 @@ class TestPresentationParser:
         role_def = self.fixtures["role_definitions"]["data"]["ns9"]
         concepts = self.fixtures["sample_concepts"]["data"]
 
-        statement = self.parser._parse_single_statement(role_id, role_data, role_def, concepts)
+        statement = self.parser._parse_single_statement(
+            role_id, role_data, role_def, concepts
+        )
 
         assert statement.role_id == role_id
         assert statement.statement_name == "CONSOLIDATED BALANCE SHEETS"
@@ -187,7 +213,7 @@ class TestPresentationParser:
         for i, (node, depth) in enumerate(flat_nodes):
             assert node.depth == depth
             if i > 0:
-                prev_depth = flat_nodes[i-1][1]
+                prev_depth = flat_nodes[i - 1][1]
                 assert depth <= prev_depth + 1  # Depth shouldn't jump by more than 1
 
 
@@ -197,8 +223,10 @@ class TestFactMatcher:
     @classmethod
     def setup_class(cls):
         """Load test fixtures."""
-        fixtures_path = Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
-        with open(fixtures_path, 'r') as f:
+        fixtures_path = (
+            Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
+        )
+        with open(fixtures_path, "r") as f:
             cls.fixtures = json.load(f)
 
         cls.fact_matcher = FactMatcher()
@@ -206,18 +234,24 @@ class TestFactMatcher:
 
         # Create test statement
         cls.mock_viewer_json = {
-            "sourceReports": [{
-                "targetReports": [{
-                    "roleDefs": cls.fixtures["role_definitions"]["data"],
-                    "rels": {
-                        "pres": {
-                            "ns9": cls.fixtures["presentation_relationships"]["data"]["relationships"]
+            "sourceReports": [
+                {
+                    "targetReports": [
+                        {
+                            "roleDefs": cls.fixtures["role_definitions"]["data"],
+                            "rels": {
+                                "pres": {
+                                    "ns9": cls.fixtures["presentation_relationships"][
+                                        "data"
+                                    ]["relationships"]
+                                }
+                            },
+                            "facts": cls.fixtures["sample_facts"]["data"],
+                            "concepts": cls.fixtures["sample_concepts"]["data"],
                         }
-                    },
-                    "facts": cls.fixtures["sample_facts"]["data"],
-                    "concepts": cls.fixtures["sample_concepts"]["data"]
-                }]
-            }]
+                    ]
+                }
+            ]
         }
 
     def test_extract_periods_from_facts(self):
@@ -230,9 +264,9 @@ class TestFactMatcher:
 
         # Check period objects are properly created
         for period in periods:
-            assert hasattr(period, 'label')
-            assert hasattr(period, 'end_date')
-            assert hasattr(period, 'instant')
+            assert hasattr(period, "label")
+            assert hasattr(period, "end_date")
+            assert hasattr(period, "instant")
             assert isinstance(period.instant, bool)
 
     def test_find_fact_for_concept_and_period(self):
@@ -246,8 +280,16 @@ class TestFactMatcher:
 
             # Get first concept from facts
             first_fact = list(facts.values())[0]
-            first_context = next(iter([v for k, v in first_fact.items() if k != 'v' and isinstance(v, dict)]))
-            test_concept = first_context.get('c')
+            first_context = next(
+                iter(
+                    [
+                        v
+                        for k, v in first_fact.items()
+                        if k != "v" and isinstance(v, dict)
+                    ]
+                )
+            )
+            test_concept = first_context.get("c")
 
             if test_concept:
                 found_fact = self.fact_matcher._find_fact_for_concept_and_period(
@@ -255,8 +297,8 @@ class TestFactMatcher:
                 )
 
                 if found_fact:  # May be None if no match
-                    assert found_fact.get('c') == test_concept
-                    assert 'v' in found_fact
+                    assert found_fact.get("c") == test_concept
+                    assert "v" in found_fact
 
     def test_period_matches(self):
         """Test period matching logic."""
@@ -268,18 +310,21 @@ class TestFactMatcher:
         assert self.fact_matcher._period_matches(instant_period, "2022-09-30") is False
 
         # Test duration period matching
-        assert self.fact_matcher._period_matches(duration_period, "2022-10-01/2023-09-30") is True
+        assert (
+            self.fact_matcher._period_matches(duration_period, "2022-10-01/2023-09-30")
+            is True
+        )
         assert self.fact_matcher._period_matches(duration_period, "2023-09-30") is True
         assert self.fact_matcher._period_matches(duration_period, "2023-12-31") is False
 
     def test_create_cell_from_fact(self):
         """Test creating Cell objects from fact data."""
         test_fact = {
-            'c': 'us-gaap:Cash',
-            'v': 29965000000,
-            'u': 'usd',
-            'd': -6,  # Millions
-            'p': '2023-09-30'
+            "c": "us-gaap:Cash",
+            "v": 29965000000,
+            "u": "usd",
+            "d": -6,  # Millions
+            "p": "2023-09-30",
         }
 
         period = Period(label="2023", end_date="2023-09-30", instant=True)
@@ -287,7 +332,7 @@ class TestFactMatcher:
         cell = self.fact_matcher._create_cell_from_fact(test_fact, period)
 
         assert cell.raw_value == 29965.0
-        assert cell.unit == 'usd'
+        assert cell.unit == "usd"
         assert cell.decimals == -6
         assert cell.period == period.label
         assert cell.value  # Should have some formatted value
@@ -295,11 +340,11 @@ class TestFactMatcher:
     def test_scale_hint_skips_positive_decimals(self):
         """Ensure positive decimal metadata does not trigger scaling."""
         test_fact = {
-            'c': 'custom:RatioMetric',
-            'v': 0.1234,
-            'u': None,
-            'd': 4,
-            'p': '2023-09-30'
+            "c": "custom:RatioMetric",
+            "v": 0.1234,
+            "u": None,
+            "d": 4,
+            "p": "2023-09-30",
         }
 
         period = Period(label="2023", end_date="2023-09-30", instant=False)
@@ -310,20 +355,24 @@ class TestFactMatcher:
 
     def test_structural_nodes_trimmed_from_rows(self):
         """Fact matcher should drop table/axis/domain/member containers."""
-        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+        from src.processor.presentation_models import (
+            PresentationNode,
+            PresentationStatement,
+            StatementType,
+        )
 
         # Build a tiny tree: root -> table -> axis -> domain -> member -> line items -> data row
         assets_node = PresentationNode(
-            concept='us-gaap:Assets',
-            label='Total assets',
+            concept="us-gaap:Assets",
+            label="Total assets",
             order=5,
             depth=5,
             abstract=False,
         )
 
         line_items = PresentationNode(
-            concept='us-gaap:StatementLineItems',
-            label='Statement [Line Items]',
+            concept="us-gaap:StatementLineItems",
+            label="Statement [Line Items]",
             order=4,
             depth=4,
             abstract=False,
@@ -331,8 +380,8 @@ class TestFactMatcher:
         )
 
         member = PresentationNode(
-            concept='custom:SomeMember',
-            label='Some Member',
+            concept="custom:SomeMember",
+            label="Some Member",
             order=3,
             depth=3,
             abstract=False,
@@ -340,8 +389,8 @@ class TestFactMatcher:
         )
 
         domain = PresentationNode(
-            concept='us-gaap:SomeDomain',
-            label='Some Domain',
+            concept="us-gaap:SomeDomain",
+            label="Some Domain",
             order=2,
             depth=2,
             abstract=False,
@@ -349,8 +398,8 @@ class TestFactMatcher:
         )
 
         axis = PresentationNode(
-            concept='us-gaap:SomeAxis',
-            label='Some Axis',
+            concept="us-gaap:SomeAxis",
+            label="Some Axis",
             order=1,
             depth=1,
             abstract=False,
@@ -358,8 +407,8 @@ class TestFactMatcher:
         )
 
         table = PresentationNode(
-            concept='us-gaap:SomeTable',
-            label='Statement [Table]',
+            concept="us-gaap:SomeTable",
+            label="Statement [Table]",
             order=0,
             depth=1,
             abstract=False,
@@ -367,8 +416,8 @@ class TestFactMatcher:
         )
 
         root = PresentationNode(
-            concept='us-gaap:StatementOfFinancialPositionAbstract',
-            label='Statement of Financial Position',
+            concept="us-gaap:StatementOfFinancialPositionAbstract",
+            label="Statement of Financial Position",
             order=0,
             depth=0,
             abstract=True,
@@ -376,43 +425,51 @@ class TestFactMatcher:
         )
 
         statement = PresentationStatement(
-            role_uri='uri',
-            role_id='ns14',
-            statement_name='Consolidated Balance Sheets',
+            role_uri="uri",
+            role_id="ns14",
+            statement_name="Consolidated Balance Sheets",
             statement_type=StatementType.BALANCE_SHEET,
             root_nodes=[root],
         )
 
-        periods = [Period(label='FY24', end_date='2024-12-31', instant=True)]
-        table_result = self.fact_matcher.match_facts_to_statement(statement, {}, periods)
+        periods = [Period(label="FY24", end_date="2024-12-31", instant=True)]
+        table_result = self.fact_matcher.match_facts_to_statement(
+            statement, {}, periods
+        )
 
         labels = [row.label for row in table_result.rows]
 
-        assert 'Statement [Table]' not in labels
-        assert 'Some Axis' not in labels
-        assert 'Some Domain' not in labels
-        assert 'Some Member' not in labels
-        assert 'Statement [Line Items]' not in labels
-        assert 'Total assets' in labels
+        assert "Statement [Table]" not in labels
+        assert "Some Axis" not in labels
+        assert "Some Domain" not in labels
+        assert "Some Member" not in labels
+        assert "Statement [Line Items]" not in labels
+        assert "Total assets" in labels
 
-        assets_row = next(row for row in table_result.rows if row.label == 'Total assets')
+        assets_row = next(
+            row for row in table_result.rows if row.label == "Total assets"
+        )
         assert assets_row.depth == 1  # Indented beneath the abstract root only
 
     def test_dimension_rows_expanded(self):
         """Dimensioned facts should materialize as additional child rows."""
-        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+        from src.processor.presentation_models import (
+            PresentationNode,
+            PresentationStatement,
+            StatementType,
+        )
 
         revenue_node = PresentationNode(
-            concept='us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-            label='Revenue',
+            concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            label="Revenue",
             order=5,
             depth=2,
             abstract=False,
         )
 
         line_items = PresentationNode(
-            concept='us-gaap:StatementLineItems',
-            label='Statement [Line Items]',
+            concept="us-gaap:StatementLineItems",
+            label="Statement [Line Items]",
             order=1,
             depth=1,
             abstract=False,
@@ -420,24 +477,24 @@ class TestFactMatcher:
         )
 
         automotive_member = PresentationNode(
-            concept='ns0:AutomotiveSalesMember',
-            label='Automotive Sales [Member]',
+            concept="ns0:AutomotiveSalesMember",
+            label="Automotive Sales [Member]",
             order=0,
             depth=3,
             abstract=False,
         )
 
         energy_member = PresentationNode(
-            concept='ns0:EnergyGenerationAndStorageMember',
-            label='Energy Generation and Storage [Member]',
+            concept="ns0:EnergyGenerationAndStorageMember",
+            label="Energy Generation and Storage [Member]",
             order=1,
             depth=3,
             abstract=False,
         )
 
         product_domain = PresentationNode(
-            concept='srt:ProductsAndServicesDomain',
-            label='Product and Service [Domain]',
+            concept="srt:ProductsAndServicesDomain",
+            label="Product and Service [Domain]",
             order=0,
             depth=2,
             abstract=False,
@@ -445,8 +502,8 @@ class TestFactMatcher:
         )
 
         product_axis = PresentationNode(
-            concept='srt:ProductOrServiceAxis',
-            label='Product and Service [Axis]',
+            concept="srt:ProductOrServiceAxis",
+            label="Product and Service [Axis]",
             order=0,
             depth=1,
             abstract=False,
@@ -454,8 +511,8 @@ class TestFactMatcher:
         )
 
         table_node = PresentationNode(
-            concept='us-gaap:StatementTable',
-            label='Statement [Table]',
+            concept="us-gaap:StatementTable",
+            label="Statement [Table]",
             order=0,
             depth=0,
             abstract=False,
@@ -463,8 +520,8 @@ class TestFactMatcher:
         )
 
         root = PresentationNode(
-            concept='us-gaap:IncomeStatementAbstract',
-            label='Income Statement [Abstract]',
+            concept="us-gaap:IncomeStatementAbstract",
+            label="Income Statement [Abstract]",
             order=0,
             depth=0,
             abstract=True,
@@ -472,133 +529,143 @@ class TestFactMatcher:
         )
 
         statement = PresentationStatement(
-            role_uri='uri',
-            role_id='ns20',
-            statement_name='Consolidated Statements of Operations',
+            role_uri="uri",
+            role_id="ns20",
+            statement_name="Consolidated Statements of Operations",
             statement_type=StatementType.INCOME_STATEMENT,
             root_nodes=[root],
         )
 
         periods = [
-            Period(label='FY24', end_date='2024-12-31', instant=False),
-            Period(label='FY23', end_date='2023-12-31', instant=False),
+            Period(label="FY24", end_date="2024-12-31", instant=False),
+            Period(label="FY23", end_date="2023-12-31", instant=False),
         ]
 
         facts = {
-            'f-total-2024': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2024-01-01/2024-12-31',
-                    'u': 'iso4217:USD',
+            "f-total-2024": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2024-01-01/2024-12-31",
+                    "u": "iso4217:USD",
                 },
-                'v': 1000.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 1000.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
-            'f-total-2023': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2023-01-01/2023-12-31',
-                    'u': 'iso4217:USD',
+            "f-total-2023": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2023-01-01/2023-12-31",
+                    "u": "iso4217:USD",
                 },
-                'v': 900.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 900.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
-            'f-auto-2024': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2024-01-01/2024-12-31',
-                    'u': 'iso4217:USD',
-                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+            "f-auto-2024": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2024-01-01/2024-12-31",
+                    "u": "iso4217:USD",
+                    "srt:ProductOrServiceAxis": "ns0:AutomotiveSalesMember",
                 },
-                'v': 600.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 600.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
-            'f-auto-2023': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2023-01-01/2023-12-31',
-                    'u': 'iso4217:USD',
-                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+            "f-auto-2023": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2023-01-01/2023-12-31",
+                    "u": "iso4217:USD",
+                    "srt:ProductOrServiceAxis": "ns0:AutomotiveSalesMember",
                 },
-                'v': 500.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 500.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
-            'f-energy-2024': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2024-01-01/2024-12-31',
-                    'u': 'iso4217:USD',
-                    'srt:ProductOrServiceAxis': 'ns0:EnergyGenerationAndStorageMember',
+            "f-energy-2024": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2024-01-01/2024-12-31",
+                    "u": "iso4217:USD",
+                    "srt:ProductOrServiceAxis": "ns0:EnergyGenerationAndStorageMember",
                 },
-                'v': 400.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 400.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
-            'f-energy-2023': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2023-01-01/2023-12-31',
-                    'u': 'iso4217:USD',
-                    'srt:ProductOrServiceAxis': 'ns0:EnergyGenerationAndStorageMember',
+            "f-energy-2023": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2023-01-01/2023-12-31",
+                    "u": "iso4217:USD",
+                    "srt:ProductOrServiceAxis": "ns0:EnergyGenerationAndStorageMember",
                 },
-                'v': 400.0,
-                'd': 0,
-                'u': 'iso4217:USD',
+                "v": 400.0,
+                "d": 0,
+                "u": "iso4217:USD",
             },
         }
 
         axis_metadata = self.fact_matcher._extract_axis_metadata(statement)
         grouped = self.fact_matcher._group_facts_by_dimensions(
-            'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+            "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
             facts,
             axis_metadata,
-            {}
+            {},
         )
-        assert any(dim_key for dim_key in grouped.keys())  # ensure dimensional groups present
+        assert any(
+            dim_key for dim_key in grouped.keys()
+        )  # ensure dimensional groups present
 
-        table_result = self.fact_matcher.match_facts_to_statement(statement, facts, periods)
+        table_result = self.fact_matcher.match_facts_to_statement(
+            statement, facts, periods
+        )
 
         revenue_rows = [
-            row for row in table_result.rows
-            if row.concept == 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+            row
+            for row in table_result.rows
+            if row.concept
+            == "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"
         ]
 
         assert [row.label for row in revenue_rows] == [
-            'Revenue',
-            'Automotive Sales',
-            'Energy Generation and Storage',
+            "Revenue",
+            "Automotive Sales",
+            "Energy Generation and Storage",
         ]
 
         revenue_row, auto_row, energy_row = revenue_rows
 
-        assert revenue_row.cells['FY24'].raw_value == 1000.0
-        assert revenue_row.cells['FY23'].raw_value == 900.0
-        assert auto_row.cells['FY24'].raw_value == 600.0
-        assert auto_row.cells['FY23'].raw_value == 500.0
-        assert energy_row.cells['FY24'].raw_value == 400.0
-        assert energy_row.cells['FY23'].raw_value == 400.0
+        assert revenue_row.cells["FY24"].raw_value == 1000.0
+        assert revenue_row.cells["FY23"].raw_value == 900.0
+        assert auto_row.cells["FY24"].raw_value == 600.0
+        assert auto_row.cells["FY23"].raw_value == 500.0
+        assert energy_row.cells["FY24"].raw_value == 400.0
+        assert energy_row.cells["FY23"].raw_value == 400.0
 
     def test_dimension_rows_collapsed_when_disabled(self):
         """Collapse mode should keep a single row despite dimensional facts."""
-        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+        from src.processor.presentation_models import (
+            PresentationNode,
+            PresentationStatement,
+            StatementType,
+        )
 
         fact_matcher = FactMatcher(expand_dimensions=False)
 
         revenue_node = PresentationNode(
-            concept='us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-            label='Revenue',
+            concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+            label="Revenue",
             order=5,
             depth=2,
             abstract=False,
         )
 
         line_items = PresentationNode(
-            concept='us-gaap:StatementLineItems',
-            label='Statement [Line Items]',
+            concept="us-gaap:StatementLineItems",
+            label="Statement [Line Items]",
             order=1,
             depth=1,
             abstract=False,
@@ -606,16 +673,16 @@ class TestFactMatcher:
         )
 
         product_axis = PresentationNode(
-            concept='srt:ProductOrServiceAxis',
-            label='Product and Service [Axis]',
+            concept="srt:ProductOrServiceAxis",
+            label="Product and Service [Axis]",
             order=0,
             depth=1,
             abstract=False,
         )
 
         table_node = PresentationNode(
-            concept='us-gaap:StatementTable',
-            label='Statement [Table]',
+            concept="us-gaap:StatementTable",
+            label="Statement [Table]",
             order=0,
             depth=0,
             abstract=False,
@@ -623,8 +690,8 @@ class TestFactMatcher:
         )
 
         root = PresentationNode(
-            concept='us-gaap:IncomeStatementAbstract',
-            label='Income Statement [Abstract]',
+            concept="us-gaap:IncomeStatementAbstract",
+            label="Income Statement [Abstract]",
             order=0,
             depth=0,
             abstract=True,
@@ -632,54 +699,56 @@ class TestFactMatcher:
         )
 
         statement = PresentationStatement(
-            role_uri='uri',
-            role_id='ns20',
-            statement_name='Consolidated Statements of Operations',
+            role_uri="uri",
+            role_id="ns20",
+            statement_name="Consolidated Statements of Operations",
             statement_type=StatementType.INCOME_STATEMENT,
             root_nodes=[root],
         )
 
         periods = [
-            Period(label='FY24', end_date='2024-12-31', instant=False),
-            Period(label='FY23', end_date='2023-12-31', instant=False),
+            Period(label="FY24", end_date="2024-12-31", instant=False),
+            Period(label="FY23", end_date="2023-12-31", instant=False),
         ]
 
         facts = {
-            'f-base': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2024-01-01/2024-12-31',
+            "f-base": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2024-01-01/2024-12-31",
                 },
-                'v': 1000.0,
-                'd': 0,
+                "v": 1000.0,
+                "d": 0,
             },
-            'f-dim': {
-                'a': {
-                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
-                    'p': '2024-01-01/2024-12-31',
-                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+            "f-dim": {
+                "a": {
+                    "c": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                    "p": "2024-01-01/2024-12-31",
+                    "srt:ProductOrServiceAxis": "ns0:AutomotiveSalesMember",
                 },
-                'v': 600.0,
-                'd': 0,
+                "v": 600.0,
+                "d": 0,
             },
         }
 
         table_result = fact_matcher.match_facts_to_statement(statement, facts, periods)
 
         revenue_rows = [
-            row for row in table_result.rows
-            if row.concept == 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+            row
+            for row in table_result.rows
+            if row.concept
+            == "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"
         ]
 
         assert len(revenue_rows) == 1
-        assert revenue_rows[0].label == 'Revenue'
+        assert revenue_rows[0].label == "Revenue"
 
     def test_format_period_label(self):
         """Test period label formatting."""
         test_cases = [
             ("2023-12-31", "2023"),
             ("2023-09-30", "Sep 30, 2023"),
-            ("2023-06-30", "Jun 30, 2023")
+            ("2023-06-30", "Jun 30, 2023"),
         ]
 
         for date_str, expected in test_cases:
@@ -697,7 +766,9 @@ class TestFactMatcher:
             periods = self.fact_matcher.extract_periods_from_facts(facts)
 
             # Match facts to statement
-            table = self.fact_matcher.match_facts_to_statement(statement, facts, periods)
+            table = self.fact_matcher.match_facts_to_statement(
+                statement, facts, periods
+            )
 
             assert table.statement == statement
             assert table.periods == periods
@@ -722,11 +793,11 @@ class TestFactMatcher:
         fact_matcher = FactMatcher(formatter=mock_formatter)
 
         test_fact = {
-            'c': 'us-gaap:Cash',
-            'v': 1000.0,
-            'u': 'usd',
-            'd': 0,
-            'p': '2023-09-30'
+            "c": "us-gaap:Cash",
+            "v": 1000.0,
+            "u": "usd",
+            "d": 0,
+            "p": "2023-09-30",
         }
 
         period = Period(label="2023", end_date="2023-09-30", instant=True)
@@ -734,7 +805,7 @@ class TestFactMatcher:
 
         # Should have called formatter
         mock_formatter.format_cell_value.assert_called_once_with(
-            1000.0, 'usd', 0, 'us-gaap:Cash'
+            1000.0, "usd", 0, "us-gaap:Cash"
         )
         assert cell.value == "1,000.0"
 
@@ -745,23 +816,31 @@ class TestPresentationParserIntegration:
     @classmethod
     def setup_class(cls):
         """Load test fixtures."""
-        fixtures_path = Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
-        with open(fixtures_path, 'r') as f:
+        fixtures_path = (
+            Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
+        )
+        with open(fixtures_path, "r") as f:
             cls.fixtures = json.load(f)
 
         cls.mock_viewer_json = {
-            "sourceReports": [{
-                "targetReports": [{
-                    "roleDefs": cls.fixtures["role_definitions"]["data"],
-                    "rels": {
-                        "pres": {
-                            "ns9": cls.fixtures["presentation_relationships"]["data"]["relationships"]
+            "sourceReports": [
+                {
+                    "targetReports": [
+                        {
+                            "roleDefs": cls.fixtures["role_definitions"]["data"],
+                            "rels": {
+                                "pres": {
+                                    "ns9": cls.fixtures["presentation_relationships"][
+                                        "data"
+                                    ]["relationships"]
+                                }
+                            },
+                            "facts": cls.fixtures["sample_facts"]["data"],
+                            "concepts": cls.fixtures["sample_concepts"]["data"],
                         }
-                    },
-                    "facts": cls.fixtures["sample_facts"]["data"],
-                    "concepts": cls.fixtures["sample_concepts"]["data"]
-                }]
-            }]
+                    ]
+                }
+            ]
         }
 
     def test_complete_parsing_pipeline(self):
@@ -774,7 +853,7 @@ class TestPresentationParserIntegration:
         assert len(statements) > 0
 
         # Extract periods from facts
-        facts = self.mock_viewer_json['sourceReports'][0]['targetReports'][0]['facts']
+        facts = self.mock_viewer_json["sourceReports"][0]["targetReports"][0]["facts"]
         periods = fact_matcher.extract_periods_from_facts(facts)
         assert len(periods) > 0
 
@@ -796,9 +875,7 @@ class TestPresentationParserIntegration:
         parser = PresentationParser()
 
         # Test with malformed viewer JSON
-        malformed_json = {
-            "sourceReports": [{"targetReports": [{}]}]
-        }
+        malformed_json = {"sourceReports": [{"targetReports": [{}]}]}
 
         # Should handle gracefully and return empty list
         statements = parser.parse_presentation_statements(malformed_json)
@@ -807,14 +884,18 @@ class TestPresentationParserIntegration:
     def test_empty_presentation_data(self):
         """Test handling empty presentation data."""
         empty_viewer_json = {
-            "sourceReports": [{
-                "targetReports": [{
-                    "roleDefs": {},
-                    "rels": {"pres": {}},
-                    "facts": {},
-                    "concepts": {}
-                }]
-            }]
+            "sourceReports": [
+                {
+                    "targetReports": [
+                        {
+                            "roleDefs": {},
+                            "rels": {"pres": {}},
+                            "facts": {},
+                            "concepts": {},
+                        }
+                    ]
+                }
+            ]
         }
 
         parser = PresentationParser()

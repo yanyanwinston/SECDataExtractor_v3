@@ -15,6 +15,7 @@ from .data_models import Period, Cell
 
 class StatementType(Enum):
     """Classification of financial statement types."""
+
     BALANCE_SHEET = "balance_sheet"
     INCOME_STATEMENT = "income_statement"
     CASH_FLOWS = "cash_flows"
@@ -26,20 +27,21 @@ class StatementType(Enum):
 @dataclass
 class PresentationNode:
     """A node in the presentation tree representing an XBRL concept."""
-    concept: str                        # XBRL concept name (e.g., "us-gaap:Assets")
-    label: str                         # Display label (using preferredLabel)
-    order: float                       # Presentation order (for sorting siblings)
-    depth: int                         # Tree depth for indentation (0 = root)
-    abstract: bool                     # Is this a header/section (no fact values)?
-    preferred_label_role: Optional[str] = None  # e.g., "terseLabel", "totalLabel"
-    children: List['PresentationNode'] = field(default_factory=list)  # Child nodes
 
-    def add_child(self, child: 'PresentationNode') -> None:
+    concept: str  # XBRL concept name (e.g., "us-gaap:Assets")
+    label: str  # Display label (using preferredLabel)
+    order: float  # Presentation order (for sorting siblings)
+    depth: int  # Tree depth for indentation (0 = root)
+    abstract: bool  # Is this a header/section (no fact values)?
+    preferred_label_role: Optional[str] = None  # e.g., "terseLabel", "totalLabel"
+    children: List["PresentationNode"] = field(default_factory=list)  # Child nodes
+
+    def add_child(self, child: "PresentationNode") -> None:
         """Add a child node and set its depth."""
         child.depth = self.depth + 1
         self.children.append(child)
 
-    def get_all_nodes_flat(self) -> List[Tuple['PresentationNode', int]]:
+    def get_all_nodes_flat(self) -> List[Tuple["PresentationNode", int]]:
         """Return all nodes in presentation order with depth.
 
         Returns:
@@ -64,16 +66,21 @@ class PresentationNode:
 @dataclass
 class PresentationStatement:
     """A financial statement built from presentation linkbase."""
-    role_uri: str                      # Full role URI from XBRL
-    role_id: str                       # Short role ID (e.g., "ns9")
-    statement_name: str                # e.g., "Consolidated Balance Sheets"
-    statement_type: StatementType      # Classified statement type
+
+    role_uri: str  # Full role URI from XBRL
+    role_id: str  # Short role ID (e.g., "ns9")
+    statement_name: str  # e.g., "Consolidated Balance Sheets"
+    statement_type: StatementType  # Classified statement type
     root_nodes: List[PresentationNode] = field(default_factory=list)  # Top-level nodes
-    r_id: Optional[str] = None          # MetaLinks role identifier (e.g., "R3")
-    group_type: Optional[str] = None    # MetaLinks groupType (statement/document/disclosure)
-    sub_group_type: Optional[str] = None  # MetaLinks subGroupType (tables/parenthetical/...)
+    r_id: Optional[str] = None  # MetaLinks role identifier (e.g., "R3")
+    group_type: Optional[str] = (
+        None  # MetaLinks groupType (statement/document/disclosure)
+    )
+    sub_group_type: Optional[str] = (
+        None  # MetaLinks subGroupType (tables/parenthetical/...)
+    )
     role_order: Optional[float] = None  # MetaLinks order for sorting
-    long_name: Optional[str] = None     # MetaLinks longName for sheet naming
+    long_name: Optional[str] = None  # MetaLinks longName for sheet naming
 
     def get_all_nodes_flat(self) -> List[Tuple[PresentationNode, int]]:
         """Return all nodes in presentation order with depth.
@@ -95,15 +102,15 @@ class PresentationStatement:
         name_source = self.long_name or self.statement_name
         name_lower = name_source.lower()
 
-        if 'balance' in name_lower or 'position' in name_lower:
+        if "balance" in name_lower or "position" in name_lower:
             return "Balance Sheet"
-        elif any(term in name_lower for term in ['income', 'operations']):
+        elif any(term in name_lower for term in ["income", "operations"]):
             return "Income Statement"
-        elif 'cash' in name_lower and 'flow' in name_lower:
+        elif "cash" in name_lower and "flow" in name_lower:
             return "Cash Flows"
-        elif 'comprehensive' in name_lower and 'income' in name_lower:
+        elif "comprehensive" in name_lower and "income" in name_lower:
             return "Comprehensive Income"
-        elif 'equity' in name_lower or 'stockholder' in name_lower:
+        elif "equity" in name_lower or "stockholder" in name_lower:
             return "Equity"
         else:
             # Truncate long names for Excel compatibility
@@ -111,8 +118,8 @@ class PresentationStatement:
 
     def sort_key(self) -> tuple:
         """Return a tuple for ordering statements consistently."""
-        order = self.role_order if self.role_order is not None else float('inf')
-        return (order, self.r_id or '', self.statement_name)
+        order = self.role_order if self.role_order is not None else float("inf")
+        return (order, self.r_id or "", self.statement_name)
 
     def __str__(self) -> str:
         """String representation of the statement structure."""
@@ -131,7 +138,8 @@ class PresentationStatement:
 @dataclass
 class StatementRow:
     """A single row in a financial statement with presentation information."""
-    node: PresentationNode            # Presentation information
+
+    node: PresentationNode  # Presentation information
     cells: Dict[str, Cell] = field(default_factory=dict)  # period_id -> Cell
 
     # Properties for compatibility with existing Excel generator
@@ -182,15 +190,16 @@ class StatementRow:
         """String representation of the row."""
         indent = "  " * self.depth
         cell_count = len([c for c in self.cells.values() if c.value])
-        abstract_marker = " [HEADER]" if self.abstract else ""
+        abstract_marker = " [HEADER]" if self.is_abstract else ""
         return f"{indent}{self.label}{abstract_marker} ({cell_count} values)"
 
 
 @dataclass
 class StatementTable:
     """Complete statement ready for rendering with facts matched to presentation."""
+
     statement: PresentationStatement
-    periods: List[Period]              # Time periods (from existing data_models.py)
+    periods: List[Period]  # Time periods (from existing data_models.py)
     rows: List[StatementRow] = field(default_factory=list)  # Ordered by presentation
 
     def __str__(self) -> str:
@@ -200,7 +209,9 @@ class StatementTable:
 
         abstract_rows = sum(1 for row in self.rows if row.is_abstract)
         data_rows = len(self.rows) - abstract_rows
-        lines.append(f"Rows: {len(self.rows)} ({data_rows} data, {abstract_rows} headers)")
+        lines.append(
+            f"Rows: {len(self.rows)} ({data_rows} data, {abstract_rows} headers)"
+        )
 
         if self.periods:
             period_labels = [p.label for p in self.periods[:3]]
@@ -215,15 +226,22 @@ def classify_statement_type(statement_name: str) -> StatementType:
     """Classify statement type from statement name."""
     name_lower = statement_name.lower()
 
-    if 'balance sheet' in name_lower or 'position' in name_lower:
+    if "balance sheet" in name_lower or "position" in name_lower:
         return StatementType.BALANCE_SHEET
-    elif any(term in name_lower for term in ['operations', 'income']) and 'comprehensive' not in name_lower:
+    elif (
+        any(term in name_lower for term in ["operations", "income"])
+        and "comprehensive" not in name_lower
+    ):
         return StatementType.INCOME_STATEMENT
-    elif 'cash flow' in name_lower:
+    elif "cash flow" in name_lower:
         return StatementType.CASH_FLOWS
-    elif 'comprehensive income' in name_lower:
+    elif "comprehensive income" in name_lower:
         return StatementType.COMPREHENSIVE_INCOME
-    elif 'equity' in name_lower or 'stockholder' in name_lower or 'shareholder' in name_lower:
+    elif (
+        "equity" in name_lower
+        or "stockholder" in name_lower
+        or "shareholder" in name_lower
+    ):
         return StatementType.EQUITY
     else:
         return StatementType.OTHER
@@ -231,10 +249,10 @@ def classify_statement_type(statement_name: str) -> StatementType:
 
 # Export all public classes and functions
 __all__ = [
-    'StatementType',
-    'PresentationNode',
-    'PresentationStatement',
-    'StatementRow',
-    'StatementTable',
-    'classify_statement_type'
+    "StatementType",
+    "PresentationNode",
+    "PresentationStatement",
+    "StatementRow",
+    "StatementTable",
+    "classify_statement_type",
 ]

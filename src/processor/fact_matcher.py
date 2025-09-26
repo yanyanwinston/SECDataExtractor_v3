@@ -39,12 +39,15 @@ class FactMatcher:
         self.expand_dimensions = expand_dimensions
         self.concept_labels: Dict[str, Dict[str, str]] = {}
 
-    def update_concept_labels(self, labels: Optional[Dict[str, Dict[str, str]]]) -> None:
+    def update_concept_labels(
+        self, labels: Optional[Dict[str, Dict[str, str]]]
+    ) -> None:
         """Refresh the concept label map supplied by the presentation parser."""
         self.concept_labels = labels or {}
 
-    def match_facts_to_statement(self, statement: PresentationStatement,
-                                facts: dict, periods: List[Period]) -> StatementTable:
+    def match_facts_to_statement(
+        self, statement: PresentationStatement, facts: dict, periods: List[Period]
+    ) -> StatementTable:
         """Create a complete statement table with facts matched to presentation.
 
         Args:
@@ -63,9 +66,7 @@ class FactMatcher:
         display_depth_by_level: Dict[int, int] = {}
 
         axis_metadata = (
-            self._extract_axis_metadata(statement)
-            if self.expand_dimensions
-            else {}
+            self._extract_axis_metadata(statement) if self.expand_dimensions else {}
         )
         concept_context_cache: Dict[str, List[dict]] = {}
 
@@ -99,11 +100,7 @@ class FactMatcher:
 
         logger.debug(f"Created {len(rows)} rows for statement")
 
-        return StatementTable(
-            statement=statement,
-            periods=periods,
-            rows=rows
-        )
+        return StatementTable(statement=statement, periods=periods, rows=rows)
 
     def _generate_rows_for_node(
         self,
@@ -116,7 +113,7 @@ class FactMatcher:
     ) -> List[StatementRow]:
         """Create one or more rows for a presentation node, expanding by dimensions."""
 
-        concept = node.concept or ''
+        concept = node.concept or ""
 
         if not concept:
             clone = self._clone_node(node, depth=display_depth)
@@ -141,7 +138,11 @@ class FactMatcher:
         # Sort: base row (no dimensions) first, then remaining dimension combinations.
         sorted_keys = sorted(
             fact_groups.keys(),
-            key=lambda key: (len(key), [axis for axis, _ in key], [member for _, member in key])
+            key=lambda key: (
+                len(key),
+                [axis for axis, _ in key],
+                [member for _, member in key],
+            ),
         )
 
         generated_rows: List[StatementRow] = []
@@ -156,9 +157,7 @@ class FactMatcher:
                 abstract = node.abstract
             else:
                 row_label = self._format_dimension_label(
-                    dims_map,
-                    axis_metadata,
-                    node.label
+                    dims_map, axis_metadata, node.label
                 )
                 row_depth = display_depth + 1
                 abstract = False
@@ -170,7 +169,7 @@ class FactMatcher:
                 abstract=abstract,
             )
 
-            cells = self._build_cells_for_group(group['contexts'], periods)
+            cells = self._build_cells_for_group(group["contexts"], periods)
 
             # Skip rows where every cell is blank.
             if all(cell.raw_value is None for cell in cells.values()):
@@ -181,7 +180,7 @@ class FactMatcher:
         return generated_rows or [
             StatementRow(
                 node=self._clone_node(node, depth=display_depth),
-                cells=self._build_empty_cells(periods)
+                cells=self._build_empty_cells(periods),
             )
         ]
 
@@ -202,15 +201,13 @@ class FactMatcher:
         groups: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
 
         for context in contexts:
-            dims = context.get('dims', {}) or {}
+            dims = context.get("dims", {}) or {}
             filtered_dims = {
-                axis: member
-                for axis, member in dims.items()
-                if axis in axis_metadata
+                axis: member for axis, member in dims.items() if axis in axis_metadata
             }
             dim_key = tuple(sorted(filtered_dims.items()))
-            group = groups.setdefault(dim_key, {'dims': filtered_dims, 'contexts': []})
-            group['contexts'].append(context)
+            group = groups.setdefault(dim_key, {"dims": filtered_dims, "contexts": []})
+            group["contexts"].append(context)
 
         return groups
 
@@ -224,17 +221,17 @@ class FactMatcher:
                 if not isinstance(context_data, dict):
                     continue
 
-                if context_data.get('c') != concept:
+                if context_data.get("c") != concept:
                     continue
 
                 record = dict(context_data)
-                record['fact_id'] = fact_id
+                record["fact_id"] = fact_id
 
-                for key in ('v', 'value', 'd', 'u', 'unit'):
+                for key in ("v", "value", "d", "u", "unit"):
                     if key in fact_data and key not in record:
                         record[key] = fact_data[key]
 
-                record['dims'] = self._extract_dimensions_from_context(context_data)
+                record["dims"] = self._extract_dimensions_from_context(context_data)
                 contexts.append(record)
 
         return contexts
@@ -244,14 +241,25 @@ class FactMatcher:
 
         dims: Dict[str, str] = {}
 
-        for container_key in ('dims', 'dimValues'):
+        for container_key in ("dims", "dimValues"):
             container = context.get(container_key)
             if isinstance(container, dict):
                 dims.update({k: v for k, v in container.items() if isinstance(v, str)})
 
         skip_keys = {
-            'c', 'p', 'u', 'unit', 'e', 'entity', 'm',
-            'fact_id', 'v', 'value', 'd', 'dims', 'dimValues'
+            "c",
+            "p",
+            "u",
+            "unit",
+            "e",
+            "entity",
+            "m",
+            "fact_id",
+            "v",
+            "value",
+            "d",
+            "dims",
+            "dimValues",
         }
 
         for key, value in context.items():
@@ -322,7 +330,7 @@ class FactMatcher:
         """Return the first context in the iterable matching the period."""
 
         for context in contexts:
-            if self._period_matches(period, context.get('p')):
+            if self._period_matches(period, context.get("p")):
                 return context
         return None
 
@@ -378,7 +386,7 @@ class FactMatcher:
             if not member_label:
                 member_label = self._label_for_concept(member)
             if not member_label:
-                member_label = member.split(':', 1)[-1]
+                member_label = member.split(":", 1)[-1]
             labels.append(self._clean_member_label(member_label))
 
         if not labels:
@@ -386,18 +394,18 @@ class FactMatcher:
         if len(labels) == 1:
             return labels[0]
 
-        return ' / '.join(labels)
+        return " / ".join(labels)
 
     def _label_for_concept(self, concept: str) -> Optional[str]:
         """Look up a preferred label for the supplied concept."""
 
         entries = self.concept_labels.get(concept) or {}
         for key in (
-            'terseLabel',
-            'label',
-            'std',
-            'en-us',
-            'en',
+            "terseLabel",
+            "label",
+            "std",
+            "en-us",
+            "en",
         ):
             if key in entries and entries[key]:
                 return entries[key]
@@ -407,9 +415,9 @@ class FactMatcher:
     def _clean_member_label(label: str) -> str:
         """Remove trailing member suffixes for cleaner display."""
 
-        cleaned = (label or '').strip()
-        if cleaned.endswith('[Member]'):
-            cleaned = cleaned[:-len('[Member]')].strip()
+        cleaned = (label or "").strip()
+        if cleaned.endswith("[Member]"):
+            cleaned = cleaned[: -len("[Member]")].strip()
         return cleaned
 
     def _extract_axis_metadata(
@@ -421,13 +429,13 @@ class FactMatcher:
         metadata: Dict[str, Dict[str, str]] = {}
 
         def traverse(node: PresentationNode, active_axis: Optional[str] = None) -> None:
-            concept = node.concept or ''
-            local_name = concept.split(':', 1)[-1]
+            concept = node.concept or ""
+            local_name = concept.split(":", 1)[-1]
 
-            if local_name.endswith('Axis'):
+            if local_name.endswith("Axis"):
                 active_axis = concept
                 metadata.setdefault(concept, {})
-            elif local_name.endswith('Member') and active_axis:
+            elif local_name.endswith("Member") and active_axis:
                 metadata.setdefault(active_axis, {})[concept] = node.label
 
             for child in node.children:
@@ -451,7 +459,7 @@ class FactMatcher:
         if not concept:
             return False
 
-        local_name = concept.split(':', 1)[-1]
+        local_name = concept.split(":", 1)[-1]
 
         if local_name == "StatementLineItems":
             return True
@@ -460,9 +468,7 @@ class FactMatcher:
         return any(local_name.endswith(suffix) for suffix in structural_suffixes)
 
     def extract_periods_from_facts(
-        self,
-        facts: dict,
-        concept_filter: Optional[set] = None
+        self, facts: dict, concept_filter: Optional[set] = None
     ) -> List[Period]:
         """Extract reporting periods from facts data.
 
@@ -482,31 +488,32 @@ class FactMatcher:
                 if not isinstance(context_data, dict):
                     continue
 
-                concept_name = context_data.get('c')
+                concept_name = context_data.get("c")
                 if concept_filter and concept_name not in concept_filter:
                     continue
 
-                period = context_data.get('p')
+                period = context_data.get("p")
                 if period:
                     periods_found.add(period)
 
         # Convert to Period objects, avoiding duplicates
-        periods_dict = {}
+        periods_dict: Dict[str, Period] = {}
         for period_str in sorted(periods_found):
             # Determine if this is an instant or duration period
-            if '/' in period_str:
+            if "/" in period_str:
                 # Duration period (start/end)
-                start_date, end_date = period_str.split('/')
+                start_date, end_date = period_str.split("/")
                 key = f"duration_{end_date}"
                 if key not in periods_dict:
                     label = self._format_period_label(end_date)
                     # Make duration periods distinctive if there's both instant and duration
-                    if f"instant_{end_date}" in [p.end_date + ("_instant" if p.instant else "_duration") for p in periods_dict.values()]:
+                    if f"instant_{end_date}" in [
+                        p.end_date + ("_instant" if p.instant else "_duration")
+                        for p in periods_dict.values()
+                    ]:
                         label = f"{label} (YTD)"
                     periods_dict[key] = Period(
-                        label=label,
-                        end_date=end_date,
-                        instant=False
+                        label=label, end_date=end_date, instant=False
                     )
             else:
                 # Instant period (single date)
@@ -518,22 +525,17 @@ class FactMatcher:
                     if duration_key in periods_dict:
                         label = f"{label} (As of)"
                     periods_dict[key] = Period(
-                        label=label,
-                        end_date=period_str,
-                        instant=True
+                        label=label, end_date=period_str, instant=True
                     )
 
-        periods = sorted(
-            periods_dict.values(),
-            key=lambda p: p.end_date,
-            reverse=True
-        )
+        periods = sorted(periods_dict.values(), key=lambda p: p.end_date, reverse=True)
 
         logger.info(f"Extracted {len(periods)} periods from facts")
         return periods
 
-    def _find_fact_for_concept_and_period(self, concept: str,
-                                         period: Period, facts: dict) -> Optional[dict]:
+    def _find_fact_for_concept_and_period(
+        self, concept: str, period: Period, facts: dict
+    ) -> Optional[dict]:
         """Find the fact matching concept and period.
 
         Args:
@@ -552,33 +554,33 @@ class FactMatcher:
                     continue
 
                 # Check if concept matches
-                if context_data.get('c') != concept:
+                if context_data.get("c") != concept:
                     continue
 
                 # Check if period matches
-                if self._period_matches(period, context_data.get('p')):
+                if self._period_matches(period, context_data.get("p")):
                     # Add fact_id to the context data for reference and enrich with value metadata
                     context_with_id = context_data.copy()
-                    context_with_id['fact_id'] = fact_id
+                    context_with_id["fact_id"] = fact_id
 
                     # Values in the viewer JSON are typically stored at the fact root.
                     # Propagate those onto the returned context so downstream consumers see them.
-                    if 'v' in fact_data and 'v' not in context_with_id:
-                        context_with_id['v'] = fact_data['v']
-                    if 'value' in fact_data and 'value' not in context_with_id:
-                        context_with_id['value'] = fact_data['value']
-                    if 'd' in fact_data and 'd' not in context_with_id:
-                        context_with_id['d'] = fact_data['d']
-                    if 'u' in fact_data and 'u' not in context_with_id:
-                        context_with_id['u'] = fact_data['u']
-                    if 'unit' in fact_data and 'unit' not in context_with_id:
-                        context_with_id['unit'] = fact_data['unit']
+                    if "v" in fact_data and "v" not in context_with_id:
+                        context_with_id["v"] = fact_data["v"]
+                    if "value" in fact_data and "value" not in context_with_id:
+                        context_with_id["value"] = fact_data["value"]
+                    if "d" in fact_data and "d" not in context_with_id:
+                        context_with_id["d"] = fact_data["d"]
+                    if "u" in fact_data and "u" not in context_with_id:
+                        context_with_id["u"] = fact_data["u"]
+                    if "unit" in fact_data and "unit" not in context_with_id:
+                        context_with_id["unit"] = fact_data["unit"]
 
                     return context_with_id
 
         return None
 
-    def _period_matches(self, period: Period, fact_period: str) -> bool:
+    def _period_matches(self, period: Period, fact_period: Optional[str]) -> bool:
         """Check if period matches fact period.
 
         Args:
@@ -596,8 +598,8 @@ class FactMatcher:
             return fact_period == period.end_date
         else:
             # For duration periods, could be in format "2022-09-25/2023-10-01"
-            if '/' in fact_period:
-                start_date, end_date = fact_period.split('/')
+            if "/" in fact_period:
+                start_date, end_date = fact_period.split("/")
                 return end_date == period.end_date
             else:
                 # Single date might represent end of period for duration
@@ -613,7 +615,7 @@ class FactMatcher:
         Returns:
             Cell object with formatted value
         """
-        raw_value = fact.get('v')
+        raw_value = fact.get("v")
         numeric_value: Optional[float] = None
         if raw_value is not None:
             try:
@@ -621,9 +623,9 @@ class FactMatcher:
             except (TypeError, ValueError):
                 numeric_value = None
 
-        unit = fact.get('u') or fact.get('unit')
-        decimals = fact.get('d')
-        concept = fact.get('c', '')
+        unit = fact.get("u") or fact.get("unit")
+        decimals = fact.get("d")
+        concept = fact.get("c", "")
 
         decimals_value = self._coerce_decimals(decimals)
 
@@ -636,7 +638,7 @@ class FactMatcher:
             and decimals_value < 0
         ):
             try:
-                scaled_numeric = numeric_value * (10 ** decimals_value)
+                scaled_numeric = numeric_value * (10**decimals_value)
                 scale_applied = True
             except (TypeError, ValueError, OverflowError):
                 scaled_numeric = numeric_value
@@ -652,11 +654,7 @@ class FactMatcher:
                     formatter_decimals = None
 
                 formatted_value = self._format_with_scale_control(
-                    scaled_numeric,
-                    unit,
-                    formatter_decimals,
-                    concept,
-                    scale_applied
+                    scaled_numeric, unit, formatter_decimals, concept, scale_applied
                 )
             except Exception as e:
                 logger.warning(f"Error formatting value {raw_value}: {e}")
@@ -679,7 +677,7 @@ class FactMatcher:
             raw_value=scaled_numeric if scaled_numeric is not None else raw_value,
             unit=unit,
             decimals=decimals,
-            period=period.label
+            period=period.label,
         )
 
     def _format_with_scale_control(
@@ -688,10 +686,12 @@ class FactMatcher:
         unit: Optional[str],
         decimals: Optional[int],
         concept: str,
-        scale_applied: bool
+        scale_applied: bool,
     ) -> str:
         """Format a numeric value while preventing double scaling when hints are applied."""
-        if not self.use_scale_hint or not getattr(self.formatter, 'scale_millions', False):
+        if not self.use_scale_hint or not getattr(
+            self.formatter, "scale_millions", False
+        ):
             return self.formatter.format_cell_value(value, unit, decimals, concept)
 
         if not scale_applied:
@@ -711,7 +711,9 @@ class FactMatcher:
             return int(decimals)
 
         if isinstance(decimals, (int, float)):
-            if isinstance(decimals, float) and (math.isnan(decimals) or math.isinf(decimals)):
+            if isinstance(decimals, float) and (
+                math.isnan(decimals) or math.isinf(decimals)
+            ):
                 return None
             return int(decimals)
 
@@ -734,13 +736,14 @@ class FactMatcher:
         """
         try:
             from datetime import datetime
-            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
 
             # For year-end dates, just show year
             if date_obj.month == 12 and date_obj.day == 31:
                 return str(date_obj.year)
             else:
-                return date_obj.strftime('%b %d, %Y')
+                return date_obj.strftime("%b %d, %Y")
 
         except Exception:
             # Fallback to original string if parsing fails

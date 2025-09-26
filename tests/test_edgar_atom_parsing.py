@@ -2,8 +2,6 @@
 
 from datetime import datetime
 
-import pytest
-
 from src.sec_downloader.edgar_client import EdgarClient
 
 
@@ -42,10 +40,12 @@ def test_search_filings_excludes_amendments(monkeypatch):
     client = EdgarClient()
 
     submissions = client._parse_atom_feed(ATOM_FEED_SAMPLE, cik="0001318605")
-    submissions.update({
-        "name": "Tesla, Inc.",
-        "tickers": ["TSLA"],
-    })
+    submissions.update(
+        {
+            "name": "Tesla, Inc.",
+            "tickers": ["TSLA"],
+        }
+    )
 
     # Patch network call so search_filings uses our synthetic data
     monkeypatch.setattr(client, "get_company_submissions", lambda cik: submissions)

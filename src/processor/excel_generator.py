@@ -4,7 +4,7 @@ Excel generator for SEC financial statements.
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -23,8 +23,9 @@ class ExcelGenerator:
         """Initialize Excel generator."""
         pass
 
-    def generate_excel(self, result: ProcessingResult, output_path: str,
-                      single_period: bool = False) -> None:
+    def generate_excel(
+        self, result: ProcessingResult, output_path: str, single_period: bool = False
+    ) -> None:
         """
         Generate Excel file from processing result.
 
@@ -65,8 +66,9 @@ class ExcelGenerator:
             logger.error(f"Error generating Excel file: {e}")
             raise
 
-    def _add_statement_sheet(self, wb: Workbook, statement: Statement,
-                           single_period: bool) -> None:
+    def _add_statement_sheet(
+        self, wb: Workbook, statement: Statement, single_period: bool
+    ) -> None:
         """
         Add a sheet for a single financial statement.
 
@@ -108,11 +110,11 @@ class ExcelGenerator:
             Cleaned sheet name
         """
         # Remove/replace invalid characters
-        invalid_chars = ['/', '\\', '?', '*', '[', ']', ':']
+        invalid_chars = ["/", "\\", "?", "*", "[", "]", ":"]
         cleaned = name
 
         for char in invalid_chars:
-            cleaned = cleaned.replace(char, '_')
+            cleaned = cleaned.replace(char, "_")
 
         # Limit length
         return cleaned[:31]
@@ -127,13 +129,15 @@ class ExcelGenerator:
         """
         # Row 1: Statement title (will be set later if needed)
         # Row 2: Period headers
-        ws['A2'] = "Item"
+        ws["A2"] = "Item"
 
         for i, period in enumerate(periods, start=2):
             col_letter = get_column_letter(i)
             # Use period label or end_date
-            period_label = getattr(period, 'label', '') or getattr(period, 'end_date', '')
-            ws[f'{col_letter}2'] = period_label
+            period_label = getattr(period, "label", "") or getattr(
+                period, "end_date", ""
+            )
+            ws[f"{col_letter}2"] = period_label
 
     def _write_statement_rows(self, ws, statement: Statement, periods: List) -> None:
         """
@@ -147,7 +151,7 @@ class ExcelGenerator:
         row_num = 3  # Start after headers
 
         for row in statement.rows:
-            presentation_node = getattr(row, 'presentation_node', None)
+            presentation_node = getattr(row, "presentation_node", None)
 
             # Column A: Item label with indentation and styling
             label_cell = ws.cell(row=row_num, column=1)
@@ -161,23 +165,23 @@ class ExcelGenerator:
                     label_cell.font = Font(bold=True)
                 elif presentation_node.preferred_label_role:
                     role = presentation_node.preferred_label_role.lower()
-                    if 'total' in role or 'subtotal' in role:
+                    if "total" in role or "subtotal" in role:
                         label_cell.font = Font(bold=True)
-                        label_cell.border = Border(top=Side(style='thin'))
+                        label_cell.border = Border(top=Side(style="thin"))
             else:
                 # Legacy fallback using existing heuristics
-                depth = getattr(row, 'depth', 0)
+                depth = getattr(row, "depth", 0)
                 if depth:
                     label_cell.alignment = Alignment(indent=max(0, min(15, depth)))
-                if getattr(row, 'is_abstract', False):
+                if getattr(row, "is_abstract", False):
                     label_cell.font = Font(bold=True)
 
             # Data columns
             for i, period in enumerate(periods, start=2):
-                col_letter = get_column_letter(i)
-
                 # Get cell value for this period
-                period_key = getattr(period, 'label', '') or getattr(period, 'end_date', '')
+                period_key = getattr(period, "label", "") or getattr(
+                    period, "end_date", ""
+                )
                 cell_data = row.cells.get(period_key)
 
                 cell = ws.cell(row=row_num, column=i)
@@ -193,21 +197,21 @@ class ExcelGenerator:
 
                     # Apply numeric formatting based on unit hints
                     if cell_data.raw_value is not None:
-                        unit = (cell_data.unit or '').lower()
-                        if 'usd' in unit:
-                            cell.number_format = '#,##0.0_);(#,##0.0)'
-                        elif 'shares' in unit:
-                            cell.number_format = '#,##0'
-                        elif unit in {'percent', '%'}:
-                            cell.number_format = '0.00%'
+                        unit = (cell_data.unit or "").lower()
+                        if "usd" in unit:
+                            cell.number_format = "#,##0.0_);(#,##0.0)"
+                        elif "shares" in unit:
+                            cell.number_format = "#,##0"
+                        elif unit in {"percent", "%"}:
+                            cell.number_format = "0.00%"
                 else:
                     cell.value = "—"
 
                 # Highlight totals/subtotals using preferred label metadata
                 if presentation_node and presentation_node.preferred_label_role:
                     role = presentation_node.preferred_label_role.lower()
-                    if 'total' in role or 'subtotal' in role:
-                        cell.border = Border(top=Side(style='thin'))
+                    if "total" in role or "subtotal" in role:
+                        cell.border = Border(top=Side(style="thin"))
 
             row_num += 1
 
@@ -224,13 +228,13 @@ class ExcelGenerator:
         abstract_font = Font(bold=True, size=10)
         normal_font = Font(size=10)
 
-        thin_border = Border(bottom=Side(style='thin'))
+        thin_border = Border(bottom=Side(style="thin"))
 
         # Header formatting (row 2)
         for col in range(1, num_periods + 2):  # +2 for label column
             cell = ws.cell(row=2, column=col)
             cell.font = header_font
-            cell.alignment = Alignment(horizontal='center')
+            cell.alignment = Alignment(horizontal="center")
             cell.border = thin_border
 
         # Data rows formatting
@@ -256,16 +260,16 @@ class ExcelGenerator:
             for col in range(2, num_periods + 2):
                 data_cell = ws.cell(row=row, column=col)
                 data_cell.font = normal_font
-                data_cell.alignment = Alignment(horizontal='right')
+                data_cell.alignment = Alignment(horizontal="right")
 
         # Set column widths
-        ws.column_dimensions['A'].width = 50  # Item labels
+        ws.column_dimensions["A"].width = 50  # Item labels
         for col in range(2, num_periods + 2):
             col_letter = get_column_letter(col)
             ws.column_dimensions[col_letter].width = 15
 
         # Freeze panes (freeze first column and header row)
-        ws.freeze_panes = 'B3'
+        ws.freeze_panes = "B3"
 
     def _is_abstract_row(self, label: str) -> bool:
         """
@@ -282,8 +286,17 @@ class ExcelGenerator:
 
         # Simple heuristics for abstract rows
         abstract_indicators = [
-            'total', 'assets', 'liabilities', 'equity', 'revenue', 'expenses',
-            'income', 'cash flows', 'operating', 'investing', 'financing'
+            "total",
+            "assets",
+            "liabilities",
+            "equity",
+            "revenue",
+            "expenses",
+            "income",
+            "cash flows",
+            "operating",
+            "investing",
+            "financing",
         ]
 
         label_lower = label.lower()
@@ -302,38 +315,38 @@ class ExcelGenerator:
         ws = wb.create_sheet(title="Summary", index=0)
 
         # Company and filing info
-        ws['A1'] = "Company Information"
-        ws['A1'].font = Font(bold=True, size=14)
+        ws["A1"] = "Company Information"
+        ws["A1"].font = Font(bold=True, size=14)
 
-        ws['A3'] = "Company:"
-        ws['B3'] = result.company_name
+        ws["A3"] = "Company:"
+        ws["B3"] = result.company_name
 
-        ws['A4'] = "Form Type:"
-        ws['B4'] = result.form_type
+        ws["A4"] = "Form Type:"
+        ws["B4"] = result.form_type
 
-        ws['A5'] = "Filing Date:"
-        ws['B5'] = result.filing_date
+        ws["A5"] = "Filing Date:"
+        ws["B5"] = result.filing_date
 
         # Statements info
-        ws['A7'] = "Financial Statements"
-        ws['A7'].font = Font(bold=True, size=12)
+        ws["A7"] = "Financial Statements"
+        ws["A7"].font = Font(bold=True, size=12)
 
         row = 9
         for i, statement in enumerate(result.statements, 1):
-            ws[f'A{row}'] = f"{i}. {statement.name}"
-            ws[f'B{row}'] = f"{len(statement.periods)} periods"
-            ws[f'C{row}'] = f"{len(statement.rows)} line items"
+            ws[f"A{row}"] = f"{i}. {statement.name}"
+            ws[f"B{row}"] = f"{len(statement.periods)} periods"
+            ws[f"C{row}"] = f"{len(statement.rows)} line items"
             row += 1
 
         # Warnings if any
         if result.warnings:
-            ws[f'A{row + 2}'] = "Warnings"
-            ws[f'A{row + 2}'].font = Font(bold=True, size=12, color="FF6600")
+            ws[f"A{row + 2}"] = "Warnings"
+            ws[f"A{row + 2}"].font = Font(bold=True, size=12, color="FF6600")
 
             for i, warning in enumerate(result.warnings):
-                ws[f'A{row + 4 + i}'] = f"• {warning}"
+                ws[f"A{row + 4 + i}"] = f"• {warning}"
 
         # Set column widths
-        ws.column_dimensions['A'].width = 20
-        ws.column_dimensions['B'].width = 30
-        ws.column_dimensions['C'].width = 20
+        ws.column_dimensions["A"].width = 20
+        ws.column_dimensions["B"].width = 30
+        ws.column_dimensions["C"].width = 20

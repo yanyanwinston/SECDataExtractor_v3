@@ -24,7 +24,7 @@ class DataParser:
         self,
         formatter: Optional[ValueFormatter] = None,
         include_disclosures: bool = False,
-        label_style: str = 'terse',
+        label_style: str = "terse",
         use_scale_hint: bool = True,
         expand_dimensions: bool = True,
     ):
@@ -67,7 +67,9 @@ class DataParser:
             statements = self._parse_with_presentation(viewer_data, form_type)
 
             if not statements:
-                error_message = "No presentation statements with fact data were produced"
+                error_message = (
+                    "No presentation statements with fact data were produced"
+                )
                 logger.error(error_message)
                 return ProcessingResult(
                     statements=[],
@@ -75,7 +77,7 @@ class DataParser:
                     filing_date=filing_date,
                     form_type=form_type,
                     success=False,
-                    error=error_message
+                    error=error_message,
                 )
 
             return ProcessingResult(
@@ -83,7 +85,7 @@ class DataParser:
                 company_name=company_name,
                 filing_date=filing_date,
                 form_type=form_type,
-                success=True
+                success=True,
             )
 
         except Exception as e:
@@ -94,94 +96,100 @@ class DataParser:
                 filing_date=filing_date,
                 form_type=form_type,
                 success=False,
-                error=str(e)
+                error=str(e),
             )
 
     def _extract_company_name(self, data: Dict[str, Any]) -> str:
         """Extract company name from viewer data."""
         company_name = ""
 
-        source_reports = data.get('sourceReports') or []
+        source_reports = data.get("sourceReports") or []
         if isinstance(source_reports, list) and source_reports:
-            target_reports = source_reports[0].get('targetReports') or []
+            target_reports = source_reports[0].get("targetReports") or []
             if isinstance(target_reports, list) and target_reports:
-                facts = target_reports[0].get('facts', {})
+                facts = target_reports[0].get("facts", {})
                 for fact_entry in facts.values():
-                    context = fact_entry.get('a')
-                    concept = context.get('c', '') if isinstance(context, dict) else ''
-                    if 'entityregistrantname' in concept.lower():
-                        company_name = fact_entry.get('v', '')
+                    context = fact_entry.get("a")
+                    concept = context.get("c", "") if isinstance(context, dict) else ""
+                    if "entityregistrantname" in concept.lower():
+                        company_name = fact_entry.get("v", "")
                         if company_name:
                             break
 
         if not company_name:
-            facts = data.get('facts', {})
+            facts = data.get("facts", {})
             for fact_entry in facts.values():
-                concept = fact_entry.get('c', '')
-                if 'entityregistrantname' in concept.lower():
-                    company_name = fact_entry.get('v', '')
+                concept = fact_entry.get("c", "")
+                if "entityregistrantname" in concept.lower():
+                    company_name = fact_entry.get("v", "")
                     break
 
         if not company_name:
-            metadata = data.get('meta', {})
-            company_name = metadata.get('entityName', metadata.get('companyName', 'Unknown Company'))
+            metadata = data.get("meta", {})
+            company_name = metadata.get(
+                "entityName", metadata.get("companyName", "Unknown Company")
+            )
 
         return str(company_name) if company_name else "Unknown Company"
 
     def _extract_filing_date(self, data: Dict[str, Any]) -> str:
         """Extract filing date from viewer data."""
-        source_reports = data.get('sourceReports') or []
+        source_reports = data.get("sourceReports") or []
         if isinstance(source_reports, list) and source_reports:
-            target_reports = source_reports[0].get('targetReports') or []
+            target_reports = source_reports[0].get("targetReports") or []
             if isinstance(target_reports, list) and target_reports:
-                facts = target_reports[0].get('facts', {})
+                facts = target_reports[0].get("facts", {})
                 for fact_entry in facts.values():
-                    context = fact_entry.get('a')
-                    concept = context.get('c', '') if isinstance(context, dict) else ''
-                    if any(term in concept.lower() for term in ['documentdate', 'filingdate', 'periodenddate']):
-                        value = fact_entry.get('v')
+                    context = fact_entry.get("a")
+                    concept = context.get("c", "") if isinstance(context, dict) else ""
+                    if any(
+                        term in concept.lower()
+                        for term in ["documentdate", "filingdate", "periodenddate"]
+                    ):
+                        value = fact_entry.get("v")
                         if value:
                             return value
 
-        facts = data.get('facts', {})
+        facts = data.get("facts", {})
         for fact_entry in facts.values():
-            concept = fact_entry.get('c', '')
-            if any(term in concept.lower() for term in ['documentdate', 'filingdate', 'periodenddate']):
-                value = fact_entry.get('v')
+            concept = fact_entry.get("c", "")
+            if any(
+                term in concept.lower()
+                for term in ["documentdate", "filingdate", "periodenddate"]
+            ):
+                value = fact_entry.get("v")
                 if value:
                     return value
 
-        return data.get('meta', {}).get('filingDate', 'Unknown Date')
+        return data.get("meta", {}).get("filingDate", "Unknown Date")
 
     def _extract_form_type(self, data: Dict[str, Any]) -> str:
         """Extract form type from viewer data."""
-        source_reports = data.get('sourceReports') or []
+        source_reports = data.get("sourceReports") or []
         if isinstance(source_reports, list) and source_reports:
-            target_reports = source_reports[0].get('targetReports') or []
+            target_reports = source_reports[0].get("targetReports") or []
             if isinstance(target_reports, list) and target_reports:
-                facts = target_reports[0].get('facts', {})
+                facts = target_reports[0].get("facts", {})
                 for fact_entry in facts.values():
-                    context = fact_entry.get('a')
-                    concept = context.get('c', '') if isinstance(context, dict) else ''
-                    if 'documenttype' in concept.lower():
-                        value = fact_entry.get('v')
+                    context = fact_entry.get("a")
+                    concept = context.get("c", "") if isinstance(context, dict) else ""
+                    if "documenttype" in concept.lower():
+                        value = fact_entry.get("v")
                         if value:
                             return value
 
-        facts = data.get('facts', {})
+        facts = data.get("facts", {})
         for fact_entry in facts.values():
-            concept = fact_entry.get('c', '')
-            if 'documenttype' in concept.lower():
-                value = fact_entry.get('v')
+            concept = fact_entry.get("c", "")
+            if "documenttype" in concept.lower():
+                value = fact_entry.get("v")
                 if value:
                     return value
 
-        return data.get('meta', {}).get('formType', 'Unknown Form')
+        return data.get("meta", {}).get("formType", "Unknown Form")
 
     def _parse_with_presentation(
-        self,
-        viewer_data: Dict[str, Any],
-        form_type: str
+        self, viewer_data: Dict[str, Any], form_type: str
     ) -> List[Statement]:
         """New presentation-based parsing method.
 
@@ -194,15 +202,17 @@ class DataParser:
         logger.info("Using presentation-based parsing")
 
         # Parse presentation structure
-        presentation_statements = self.presentation_parser.parse_presentation_statements(
-            viewer_data
+        presentation_statements = (
+            self.presentation_parser.parse_presentation_statements(viewer_data)
         )
 
         self.fact_matcher.update_concept_labels(
             self.presentation_parser.concept_label_map
         )
 
-        presentation_statements = self._filter_presentation_statements(presentation_statements)
+        presentation_statements = self._filter_presentation_statements(
+            presentation_statements
+        )
 
         if not presentation_statements:
             raise ValueError("No presentation statements found in viewer data")
@@ -212,8 +222,7 @@ class DataParser:
             raise ValueError("No facts found in viewer data")
 
         period_selection_context = self._build_period_selection_context(
-            viewer_data,
-            form_type
+            viewer_data, form_type
         )
 
         # Match facts to presentation for each statement
@@ -222,11 +231,15 @@ class DataParser:
 
         for pres_statement in presentation_statements:
             try:
-                concepts_for_statement = self._collect_concepts_from_statement(pres_statement)
+                concepts_for_statement = self._collect_concepts_from_statement(
+                    pres_statement
+                )
 
                 periods_for_statement = self.fact_matcher.extract_periods_from_facts(
                     facts,
-                    concept_filter=concepts_for_statement if concepts_for_statement else None
+                    concept_filter=(
+                        concepts_for_statement if concepts_for_statement else None
+                    ),
                 )
 
                 periods_for_statement = self._select_periods_for_statement(
@@ -240,7 +253,7 @@ class DataParser:
                 if not periods_for_statement:
                     logger.debug(
                         "Statement %s has no applicable periods; skipping",
-                        pres_statement.statement_name
+                        pres_statement.statement_name,
                     )
                     continue
 
@@ -251,7 +264,7 @@ class DataParser:
                 if not self._statement_table_has_data(table):
                     logger.debug(
                         "Statement %s has no fact data; skipping",
-                        pres_statement.statement_name
+                        pres_statement.statement_name,
                     )
                     continue
 
@@ -291,23 +304,22 @@ class DataParser:
             StatementType.BALANCE_SHEET,
             StatementType.INCOME_STATEMENT,
             StatementType.CASH_FLOWS,
-            StatementType.EQUITY
+            StatementType.EQUITY,
         }
         return statement.statement_type in primary_types
 
     def _filter_presentation_statements(
-        self,
-        statements: List[PresentationStatement]
+        self, statements: List[PresentationStatement]
     ) -> List[PresentationStatement]:
         """Filter statements based on MetaLinks group type metadata."""
 
         if not statements or self.include_disclosures:
             return statements
 
-        if not any(getattr(stmt, 'group_type', None) for stmt in statements):
+        if not any(getattr(stmt, "group_type", None) for stmt in statements):
             return statements
 
-        allowed_groups = {'statement'}
+        allowed_groups = {"statement"}
         primary_types = {
             StatementType.BALANCE_SHEET,
             StatementType.INCOME_STATEMENT,
@@ -318,13 +330,13 @@ class DataParser:
 
         filtered = []
         for stmt in statements:
-            group = (stmt.group_type or '').lower()
+            group = (stmt.group_type or "").lower()
             if group in allowed_groups:
                 filtered.append(stmt)
             elif (
                 not group
                 and stmt.statement_type in primary_types
-                and not stmt.statement_name.lower().startswith('disclosure')
+                and not stmt.statement_name.lower().startswith("disclosure")
             ):
                 filtered.append(stmt)
 
@@ -334,20 +346,14 @@ class DataParser:
         filtered.sort(key=lambda stmt: stmt.sort_key())
         return filtered
 
-    def _collect_concepts_from_statement(
-        self,
-        statement: PresentationStatement
-    ) -> set:
+    def _collect_concepts_from_statement(self, statement: PresentationStatement) -> set:
         """Gather concept names used in a single presentation statement."""
         return {
-            node.concept
-            for node, _ in statement.get_all_nodes_flat()
-            if node.concept
+            node.concept for node, _ in statement.get_all_nodes_flat() if node.concept
         }
 
     def _collect_concepts_from_statements(
-        self,
-        statements: List[PresentationStatement]
+        self, statements: List[PresentationStatement]
     ) -> set:
         """Gather concept names across multiple statements."""
         concepts = set()
@@ -372,20 +378,21 @@ class DataParser:
         durations = [p for p in sorted_periods if not p.instant]
 
         statement_type = statement.statement_type
-        document_end_dates: List[datetime] = context.get('document_end_dates', []) or []
-        fiscal_year_starts: List[datetime] = context.get('fiscal_year_starts', []) or []
+        document_end_dates: List[datetime] = context.get("document_end_dates", []) or []
+        fiscal_year_starts: List[datetime] = context.get("fiscal_year_starts", []) or []
 
         period_usage = self._compute_period_usage(concepts_for_statement, facts)
         instant_usage = {
-            period.end_date: period_usage.get(period.end_date, 0)
-            for period in instants
+            period.end_date: period_usage.get(period.end_date, 0) for period in instants
         }
         duration_usage = {
             period.end_date: period_usage.get(period.end_date, 0)
             for period in durations
         }
 
-        def find_matching_period(target_date: datetime, require_instant: bool, used: set) -> Optional[Period]:
+        def find_matching_period(
+            target_date: datetime, require_instant: bool, used: set
+        ) -> Optional[Period]:
             candidates = instants if require_instant else durations
             target_iso = target_date.date().isoformat()
             for period in candidates:
@@ -430,9 +437,13 @@ class DataParser:
 
             desired = desired_targets[:desired_count]
             for target_date in desired:
-                period = find_matching_period(target_date, require_instant=True, used=used_periods)
+                period = find_matching_period(
+                    target_date, require_instant=True, used=used_periods
+                )
                 if period:
-                    period.label = self._format_period_display_label(target_date, is_instant=True)
+                    period.label = self._format_period_display_label(
+                        target_date, is_instant=True
+                    )
                     selected.append(period)
                     used_periods.add(id(period))
             if len(selected) < desired_count:
@@ -440,16 +451,15 @@ class DataParser:
                     instants,
                     key=lambda p: (
                         instant_usage.get(p.end_date, 0),
-                        datetime.strptime(p.end_date, '%Y-%m-%d')
+                        datetime.strptime(p.end_date, "%Y-%m-%d"),
                     ),
-                    reverse=True
+                    reverse=True,
                 )
                 for period in weighted_instants:
                     if id(period) in used_periods:
                         continue
                     period.label = self._format_period_display_label(
-                        datetime.strptime(period.end_date, '%Y-%m-%d'),
-                        is_instant=True
+                        datetime.strptime(period.end_date, "%Y-%m-%d"), is_instant=True
                     )
                     selected.append(period)
                     used_periods.add(id(period))
@@ -462,7 +472,7 @@ class DataParser:
             StatementType.INCOME_STATEMENT,
             StatementType.CASH_FLOWS,
             StatementType.COMPREHENSIVE_INCOME,
-            StatementType.EQUITY
+            StatementType.EQUITY,
         }:
             desired_count = 3
             desired_targets = list(targets)
@@ -478,9 +488,13 @@ class DataParser:
 
             desired = desired_targets[:desired_count]
             for target_date in desired:
-                period = find_matching_period(target_date, require_instant=False, used=used_periods)
+                period = find_matching_period(
+                    target_date, require_instant=False, used=used_periods
+                )
                 if period:
-                    period.label = self._format_period_display_label(target_date, is_instant=False)
+                    period.label = self._format_period_display_label(
+                        target_date, is_instant=False
+                    )
                     selected.append(period)
                     used_periods.add(id(period))
             if len(selected) < desired_count:
@@ -488,24 +502,28 @@ class DataParser:
                     durations,
                     key=lambda p: (
                         duration_usage.get(p.end_date, 0),
-                        datetime.strptime(p.end_date, '%Y-%m-%d')
+                        datetime.strptime(p.end_date, "%Y-%m-%d"),
                     ),
-                    reverse=True
+                    reverse=True,
                 )
                 fallback_candidates = weighted_durations + instants
                 for period in fallback_candidates:
                     if id(period) in used_periods:
                         continue
                     period.label = self._format_period_display_label(
-                        datetime.strptime(period.end_date, '%Y-%m-%d'),
-                        is_instant=period.instant
+                        datetime.strptime(period.end_date, "%Y-%m-%d"),
+                        is_instant=period.instant,
                     )
                     selected.append(period)
                     used_periods.add(id(period))
                     if len(selected) == desired_count:
                         break
             if not selected:
-                selected = durations[:desired_count] or instants[:desired_count] or sorted_periods[:desired_count]
+                selected = (
+                    durations[:desired_count]
+                    or instants[:desired_count]
+                    or sorted_periods[:desired_count]
+                )
 
         else:
             selected = sorted_periods[:3]
@@ -513,22 +531,22 @@ class DataParser:
         return selected
 
     def _build_period_selection_context(
-        self,
-        viewer_data: Dict[str, Any],
-        form_type: str
+        self, viewer_data: Dict[str, Any], form_type: str
     ) -> Dict[str, Any]:
         return {
-            'document_end_dates': self._extract_document_period_end_dates(viewer_data),
-            'fiscal_year_starts': self._extract_fiscal_year_start_dates(viewer_data),
-            'form_type': form_type,
+            "document_end_dates": self._extract_document_period_end_dates(viewer_data),
+            "fiscal_year_starts": self._extract_fiscal_year_start_dates(viewer_data),
+            "form_type": form_type,
         }
 
-    def _extract_document_period_end_dates(self, viewer_data: Dict[str, Any]) -> List[datetime]:
+    def _extract_document_period_end_dates(
+        self, viewer_data: Dict[str, Any]
+    ) -> List[datetime]:
         """Extract document period end dates to help align reporting periods."""
         facts = (
-            viewer_data.get('sourceReports', [{}])[0]
-            .get('targetReports', [{}])[0]
-            .get('facts', {})
+            viewer_data.get("sourceReports", [{}])[0]
+            .get("targetReports", [{}])[0]
+            .get("facts", {})
         )
         end_dates: Set[datetime] = set()
 
@@ -536,27 +554,29 @@ class DataParser:
             for context in fact_data.values():
                 if not isinstance(context, dict):
                     continue
-                concept = context.get('c', '').lower()
-                if 'documentperiodenddate' not in concept:
+                concept = context.get("c", "").lower()
+                if "documentperiodenddate" not in concept:
                     continue
-                period_str = context.get('p')
+                period_str = context.get("p")
                 if not period_str:
                     continue
-                end_str = period_str.split('/')[-1]
+                end_str = period_str.split("/")[-1]
                 try:
-                    end_dates.add(datetime.strptime(end_str, '%Y-%m-%d'))
+                    end_dates.add(datetime.strptime(end_str, "%Y-%m-%d"))
                 except ValueError:
                     continue
 
         return sorted(end_dates, reverse=True)
 
-    def _extract_fiscal_year_start_dates(self, viewer_data: Dict[str, Any]) -> List[datetime]:
+    def _extract_fiscal_year_start_dates(
+        self, viewer_data: Dict[str, Any]
+    ) -> List[datetime]:
         """Extract fiscal year start dates (as day-after fiscal year end) from viewer data."""
 
         facts = (
-            viewer_data.get('sourceReports', [{}])[0]
-            .get('targetReports', [{}])[0]
-            .get('facts', {})
+            viewer_data.get("sourceReports", [{}])[0]
+            .get("targetReports", [{}])[0]
+            .get("facts", {})
         )
 
         fiscal_year_focus: Optional[int] = None
@@ -566,16 +586,16 @@ class DataParser:
             for context in fact.values():
                 if not isinstance(context, dict):
                     continue
-                concept = context.get('c')
-                if concept == 'dei:DocumentFiscalYearFocus':
-                    value = fact.get('v') or context.get('v')
+                concept = context.get("c")
+                if concept == "dei:DocumentFiscalYearFocus":
+                    value = fact.get("v") or context.get("v")
                     if value:
                         try:
                             fiscal_year_focus = int(str(value).strip())
                         except ValueError:
                             continue
-                elif concept == 'dei:CurrentFiscalYearEndDate':
-                    value = fact.get('v') or context.get('v')
+                elif concept == "dei:CurrentFiscalYearEndDate":
+                    value = fact.get("v") or context.get("v")
                     if isinstance(value, str) and len(value) >= 7:
                         fiscal_year_end_value = value
 
@@ -583,7 +603,7 @@ class DataParser:
             return []
 
         clean_value = fiscal_year_end_value.strip()
-        if clean_value.startswith('--'):
+        if clean_value.startswith("--"):
             clean_value = clean_value[2:]
 
         try:
@@ -604,17 +624,17 @@ class DataParser:
 
         return sorted(starts, reverse=True)
 
-    def _format_period_display_label(self, target_date: datetime, is_instant: bool) -> str:
+    def _format_period_display_label(
+        self, target_date: datetime, is_instant: bool
+    ) -> str:
         """Human-friendly label for a reporting period."""
         display_date = target_date
         if is_instant:
             display_date = target_date - timedelta(days=1)
-        return display_date.strftime('%b %d, %Y')
+        return display_date.strftime("%b %d, %Y")
 
     def _compute_period_usage(
-        self,
-        concepts: Optional[Set[str]],
-        facts: Dict[str, Any]
+        self, concepts: Optional[Set[str]], facts: Dict[str, Any]
     ) -> Counter:
         if not concepts:
             return Counter()
@@ -625,9 +645,9 @@ class DataParser:
             for context in fact_data.values():
                 if not isinstance(context, dict):
                     continue
-                if context.get('c') not in concepts:
+                if context.get("c") not in concepts:
                     continue
-                period = context.get('p')
+                period = context.get("p")
                 if period:
                     counts[period] += 1
 
@@ -637,7 +657,9 @@ class DataParser:
         """Determine whether a matched statement table contains any facts."""
         return any(row.has_data() for row in table.rows)
 
-    def _extract_periods_from_viewer_data(self, viewer_data: Dict[str, Any]) -> List[Period]:
+    def _extract_periods_from_viewer_data(
+        self, viewer_data: Dict[str, Any]
+    ) -> List[Period]:
         """Extract periods from viewer data using fact matcher.
 
         Args:
@@ -662,7 +684,9 @@ class DataParser:
             logger.error(f"Error extracting periods: {e}")
             return []
 
-    def _extract_facts_from_viewer_data(self, viewer_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_facts_from_viewer_data(
+        self, viewer_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Extract facts from viewer data.
 
         Args:
@@ -673,8 +697,8 @@ class DataParser:
         """
         try:
             # Navigate to facts in sourceReports structure
-            target_report = viewer_data['sourceReports'][0]['targetReports'][0]
-            facts = target_report.get('facts', {})
+            target_report = viewer_data["sourceReports"][0]["targetReports"][0]
+            facts = target_report.get("facts", {})
 
             logger.debug(f"Extracted {len(facts)} facts from viewer data")
             return facts
@@ -683,14 +707,16 @@ class DataParser:
             logger.error(f"Could not extract facts from viewer data: {e}")
 
             # Try legacy format
-            legacy_facts = viewer_data.get('facts', {})
+            legacy_facts = viewer_data.get("facts", {})
             if legacy_facts:
                 logger.info(f"Found {len(legacy_facts)} facts in legacy format")
                 return legacy_facts
 
             return {}
 
-    def _convert_statement_tables_to_legacy_format(self, tables: List[StatementTable]) -> List[Statement]:
+    def _convert_statement_tables_to_legacy_format(
+        self, tables: List[StatementTable]
+    ) -> List[Statement]:
         """Convert StatementTable objects to legacy Statement format."""
 
         legacy_statements: List[Statement] = []
@@ -704,7 +730,7 @@ class DataParser:
                     concept=stmt_row.node.concept,
                     is_abstract=stmt_row.node.abstract,
                     depth=stmt_row.node.depth,
-                    cells=dict(stmt_row.cells)
+                    cells=dict(stmt_row.cells),
                 )
 
                 # Preserve presentation metadata for Excel generator enhancements
@@ -716,7 +742,7 @@ class DataParser:
                     name=table.statement.statement_name,
                     short_name=table.statement.get_short_name(),
                     periods=table.periods,
-                    rows=legacy_rows
+                    rows=legacy_rows,
                 )
             )
 

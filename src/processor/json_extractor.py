@@ -19,9 +19,7 @@ class ViewerDataExtractor:
         pass
 
     def extract_viewer_data(
-        self,
-        viewer_html_path: str,
-        meta_links_candidates: Optional[List[Path]] = None
+        self, viewer_html_path: str, meta_links_candidates: Optional[List[Path]] = None
     ) -> Dict[str, Any]:
         """
         Extract viewer JSON data from HTML file.
@@ -42,7 +40,7 @@ class ViewerDataExtractor:
 
         try:
             # Read HTML content
-            with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(html_file, "r", encoding="utf-8", errors="ignore") as f:
                 html_content = f.read()
 
             # Extract JSON data from script tags
@@ -53,19 +51,20 @@ class ViewerDataExtractor:
 
             # Attempt to load supplemental metadata (MetaLinks)
             meta_links = self._load_meta_links(
-                html_file,
-                extra_candidates=meta_links_candidates or []
+                html_file, extra_candidates=meta_links_candidates or []
             )
             if meta_links:
-                json_data['meta_links'] = meta_links
+                json_data["meta_links"] = meta_links
 
                 role_map = self._build_role_map(meta_links, html_file.name)
                 if role_map:
-                    json_data['role_map'] = role_map
+                    json_data["role_map"] = role_map
 
-                concept_labels = self._build_concept_label_map(meta_links, html_file.name)
+                concept_labels = self._build_concept_label_map(
+                    meta_links, html_file.name
+                )
                 if concept_labels:
-                    json_data['concept_labels'] = concept_labels
+                    json_data["concept_labels"] = concept_labels
 
             logger.info("Successfully extracted viewer JSON data")
             return json_data
@@ -87,11 +86,11 @@ class ViewerDataExtractor:
         # Look for common patterns used by iXBRL viewer
         patterns = [
             # Pattern 1: var viewer_data = {...}
-            r'var\s+viewer_data\s*=\s*(\{.*?\});',
+            r"var\s+viewer_data\s*=\s*(\{.*?\});",
             # Pattern 2: window.viewer = {...}
-            r'window\.viewer\s*=\s*(\{.*?\});',
+            r"window\.viewer\s*=\s*(\{.*?\});",
             # Pattern 3: iXBRLViewer.load({...})
-            r'iXBRLViewer\.load\s*\(\s*(\{.*?\})\s*\)',
+            r"iXBRLViewer\.load\s*\(\s*(\{.*?\})\s*\)",
             # Pattern 4: Any large JSON object in script tags with facts
             r'<script[^>]*>\s*.*?(\{.*?"facts".*?\})\s*.*?</script>',
             # Pattern 5: Large standalone JSON object with sourceReports (newer Arelle format)
@@ -114,7 +113,9 @@ class ViewerDataExtractor:
 
                     # Validate that this looks like viewer data
                     if self._validate_viewer_data(data):
-                        logger.debug(f"Found viewer data using pattern: {pattern[:50]}...")
+                        logger.debug(
+                            f"Found viewer data using pattern: {pattern[:50]}..."
+                        )
                         return data
 
                 except json.JSONDecodeError:
@@ -127,16 +128,14 @@ class ViewerDataExtractor:
         return self._extract_json_aggressive(html_content)
 
     def _load_meta_links(
-        self,
-        html_file: Path,
-        extra_candidates: List[Path]
+        self, html_file: Path, extra_candidates: List[Path]
     ) -> Optional[Dict[str, Any]]:
         """Load MetaLinks.json located near the viewer HTML or provided candidates."""
-        candidates = [html_file.with_name('MetaLinks.json')]
+        candidates = [html_file.with_name("MetaLinks.json")]
 
         # Some viewers are generated into temp folders. Try parent directory as fallback.
         if html_file.parent != html_file.parent.parent:
-            candidates.append(html_file.parent.parent / 'MetaLinks.json')
+            candidates.append(html_file.parent.parent / "MetaLinks.json")
 
         candidates.extend(extra_candidates)
 
@@ -145,15 +144,19 @@ class ViewerDataExtractor:
                 continue
 
             try:
-                with candidate.open('r', encoding='utf-8') as fp:
+                with candidate.open("r", encoding="utf-8") as fp:
                     logger.debug("Loaded MetaLinks from %s", candidate)
                     return json.load(fp)
             except Exception as exc:
-                logger.warning("Failed to parse MetaLinks.json at %s: %s", candidate, exc)
+                logger.warning(
+                    "Failed to parse MetaLinks.json at %s: %s", candidate, exc
+                )
 
         return None
 
-    def _build_role_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, Dict[str, Any]]]]:
+    def _build_role_map(
+        self, meta_links: Dict[str, Any], instance_name: str
+    ) -> Optional[Dict[str, Dict[str, Dict[str, Any]]]]:
         """Build role metadata map keyed by URI and long name for easy lookup.
 
         Args:
@@ -163,7 +166,7 @@ class ViewerDataExtractor:
         Returns:
             Mapping from role URI to role metadata or None if unavailable
         """
-        instance_data = meta_links.get('instance') or {}
+        instance_data = meta_links.get("instance") or {}
 
         # Prefer an entry matching the viewer HTML name; fall back to first
         report_block = instance_data.get(instance_name)
@@ -173,7 +176,7 @@ class ViewerDataExtractor:
             else:
                 return None
 
-        reports = report_block.get('report')
+        reports = report_block.get("report")
         if not isinstance(reports, dict):
             return None
 
@@ -181,46 +184,48 @@ class ViewerDataExtractor:
         by_long_name: Dict[str, Dict[str, Any]] = {}
         by_normalized_name: Dict[str, Dict[str, Any]] = {}
         for role_id, payload in reports.items():
-            role_uri = payload.get('role')
+            role_uri = payload.get("role")
             if not role_uri:
                 continue
 
             try:
-                order = payload.get('order')
+                order = payload.get("order")
                 order_value = float(order) if order is not None else None
             except (TypeError, ValueError):
                 order_value = None
 
             normalized = {
-                'r_id': role_id,
-                'groupType': payload.get('groupType'),
-                'subGroupType': payload.get('subGroupType'),
-                'longName': payload.get('longName'),
-                'shortName': payload.get('shortName'),
-                'order': order_value,
-                'isDefault': payload.get('isDefault'),
+                "r_id": role_id,
+                "groupType": payload.get("groupType"),
+                "subGroupType": payload.get("subGroupType"),
+                "longName": payload.get("longName"),
+                "shortName": payload.get("shortName"),
+                "order": order_value,
+                "isDefault": payload.get("isDefault"),
             }
             by_uri[role_uri] = normalized
-            long_name = payload.get('longName')
+            long_name = payload.get("longName")
             if isinstance(long_name, str):
                 lower_name = long_name.lower()
                 by_long_name[lower_name] = normalized
-                if ' - ' in lower_name:
-                    _, _, tail = lower_name.partition(' - ')
+                if " - " in lower_name:
+                    _, _, tail = lower_name.partition(" - ")
                     by_normalized_name[tail] = normalized
 
         if not (by_uri or by_long_name or by_normalized_name):
             return None
 
         return {
-            'by_uri': by_uri,
-            'by_long_name': by_long_name,
-            'by_normalized_name': by_normalized_name
+            "by_uri": by_uri,
+            "by_long_name": by_long_name,
+            "by_normalized_name": by_normalized_name,
         }
 
-    def _build_concept_label_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, str]]]:
+    def _build_concept_label_map(
+        self, meta_links: Dict[str, Any], instance_name: str
+    ) -> Optional[Dict[str, Dict[str, str]]]:
         """Build concept label map keyed by concept QName."""
-        instance_data = meta_links.get('instance') or {}
+        instance_data = meta_links.get("instance") or {}
         instance_entry = instance_data.get(instance_name)
         if not instance_entry and instance_data:
             instance_entry = next(iter(instance_data.values()))
@@ -228,7 +233,7 @@ class ViewerDataExtractor:
         if not instance_entry:
             return None
 
-        tag_block = instance_entry.get('tag')
+        tag_block = instance_entry.get("tag")
 
         if not isinstance(tag_block, dict):
             return None
@@ -239,12 +244,12 @@ class ViewerDataExtractor:
             if not isinstance(payload, dict):
                 continue
 
-            concept_qname = raw_name.replace('_', ':', 1)
-            lang_info = payload.get('lang') or {}
+            concept_qname = raw_name.replace("_", ":", 1)
+            lang_info = payload.get("lang") or {}
             role_entries: Dict[str, str] = {}
 
             for lang_data in lang_info.values():
-                roles = lang_data.get('role') or {}
+                roles = lang_data.get("role") or {}
                 for role_name, role_value in roles.items():
                     if isinstance(role_value, str) and role_value.strip():
                         role_entries.setdefault(role_name, role_value)
@@ -265,10 +270,10 @@ class ViewerDataExtractor:
             Cleaned JSON string
         """
         # Remove trailing semicolon
-        json_str = json_str.rstrip(';')
+        json_str = json_str.rstrip(";")
 
         # Remove any trailing JavaScript code
-        json_str = re.sub(r'\s*[;}]\s*$', '', json_str)
+        json_str = re.sub(r"\s*[;}]\s*$", "", json_str)
 
         # Handle common JavaScript to JSON issues
         # Replace single quotes with double quotes (but be careful of escaped quotes)
@@ -288,25 +293,28 @@ class ViewerDataExtractor:
             True if this looks like viewer data
         """
         # Check for common iXBRL viewer data structures
-        required_keys = ['facts', 'concepts', 'sourceReports']
+        required_keys = ["facts", "concepts", "sourceReports"]
 
         # Must have at least some required keys
         if not any(key in data for key in required_keys):
             return False
 
         # Check for newer Arelle format with sourceReports
-        if 'sourceReports' in data:
-            if isinstance(data['sourceReports'], list) and len(data['sourceReports']) > 0:
+        if "sourceReports" in data:
+            if (
+                isinstance(data["sourceReports"], list)
+                and len(data["sourceReports"]) > 0
+            ):
                 # Check if first source report has the expected structure
-                first_report = data['sourceReports'][0]
-                if isinstance(first_report, dict) and 'targetReports' in first_report:
+                first_report = data["sourceReports"][0]
+                if isinstance(first_report, dict) and "targetReports" in first_report:
                     return True
 
         # Check for older format
-        if 'facts' in data and isinstance(data['facts'], dict):
+        if "facts" in data and isinstance(data["facts"], dict):
             return True
 
-        if 'concepts' in data and isinstance(data['concepts'], dict):
+        if "concepts" in data and isinstance(data["concepts"], dict):
             return True
 
         return False
@@ -329,13 +337,15 @@ class ViewerDataExtractor:
                 '{\n "concepts"',
                 '{"concepts"',
                 '{\n "facts"',
-                '{"facts"'
+                '{"facts"',
             ]
 
             for indicator in json_start_indicators:
                 pos = html_content.find(indicator)
                 if pos != -1:
-                    logger.debug(f"Found JSON indicator '{indicator}' at position {pos}")
+                    logger.debug(
+                        f"Found JSON indicator '{indicator}' at position {pos}"
+                    )
 
                     # Extract complete JSON object from this position
                     json_str = self._extract_complete_json(html_content, pos)
@@ -344,22 +354,32 @@ class ViewerDataExtractor:
                         try:
                             data = json.loads(json_str)
                             if self._validate_viewer_data(data):
-                                logger.debug("Successfully parsed JSON from aggressive extraction")
+                                logger.debug(
+                                    "Successfully parsed JSON from aggressive extraction"
+                                )
                                 return data
                         except json.JSONDecodeError as e:
-                            logger.debug(f"JSON parsing failed for indicator '{indicator}': {e}")
+                            logger.debug(
+                                f"JSON parsing failed for indicator '{indicator}': {e}"
+                            )
                             continue
 
             # If indicators don't work, try script-based approach
-            script_pattern = r'<script[^>]*>(.*?)</script>'
-            scripts = re.findall(script_pattern, html_content, re.DOTALL | re.IGNORECASE)
+            script_pattern = r"<script[^>]*>(.*?)</script>"
+            scripts = re.findall(
+                script_pattern, html_content, re.DOTALL | re.IGNORECASE
+            )
 
             for script_content in scripts:
                 # Look for any large JSON object starting with {
-                brace_positions = [m.start() for m in re.finditer(r'\{', script_content)]
+                brace_positions = [
+                    m.start() for m in re.finditer(r"\{", script_content)
+                ]
 
                 # Try the largest potential JSON objects first
-                for pos in sorted(brace_positions, key=lambda p: len(script_content) - p, reverse=True)[:5]:
+                for pos in sorted(
+                    brace_positions, key=lambda p: len(script_content) - p, reverse=True
+                )[:5]:
                     try:
                         json_str = self._extract_complete_json(script_content, pos)
 
@@ -368,7 +388,7 @@ class ViewerDataExtractor:
                             if self._validate_viewer_data(data):
                                 return data
 
-                    except:
+                    except Exception:
                         continue
 
         except Exception as e:
@@ -387,7 +407,7 @@ class ViewerDataExtractor:
         Returns:
             Complete JSON string or None
         """
-        if text[start_pos] != '{':
+        if text[start_pos] != "{":
             return None
 
         brace_count = 0
@@ -399,7 +419,7 @@ class ViewerDataExtractor:
                 escape_next = False
                 continue
 
-            if char == '\\' and in_string:
+            if char == "\\" and in_string:
                 escape_next = True
                 continue
 
@@ -408,12 +428,12 @@ class ViewerDataExtractor:
                 continue
 
             if not in_string:
-                if char == '{':
+                if char == "{":
                     brace_count += 1
-                elif char == '}':
+                elif char == "}":
                     brace_count -= 1
 
                     if brace_count == 0:
-                        return text[start_pos:i+1]
+                        return text[start_pos : i + 1]
 
         return None

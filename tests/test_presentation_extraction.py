@@ -15,15 +15,21 @@ from typing import Dict, List, Any, Set, Tuple
 class PresentationNode:
     """Simple presentation node for testing."""
 
-    def __init__(self, concept: str, label: str = "", depth: int = 0,
-                 abstract: bool = False, children: List['PresentationNode'] = None):
+    def __init__(
+        self,
+        concept: str,
+        label: str = "",
+        depth: int = 0,
+        abstract: bool = False,
+        children: List["PresentationNode"] = None,
+    ):
         self.concept = concept
         self.label = label or concept
         self.depth = depth
         self.abstract = abstract
         self.children = children or []
 
-    def add_child(self, child: 'PresentationNode'):
+    def add_child(self, child: "PresentationNode"):
         """Add a child node."""
         child.depth = self.depth + 1
         self.children.append(child)
@@ -35,7 +41,7 @@ class PresentationNode:
             concepts.update(child.get_all_concepts())
         return concepts
 
-    def traverse_depth_first(self) -> List[Tuple['PresentationNode', int]]:
+    def traverse_depth_first(self) -> List[Tuple["PresentationNode", int]]:
         """Traverse tree depth-first, returning (node, depth) tuples."""
         result = [(self, self.depth)]
         for child in self.children:
@@ -49,11 +55,15 @@ class TestPresentationExtraction:
     @classmethod
     def setup_class(cls):
         """Load test fixtures."""
-        fixtures_path = Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
-        with open(fixtures_path, 'r') as f:
+        fixtures_path = (
+            Path(__file__).parent / "fixtures" / "viewer_schema_samples.json"
+        )
+        with open(fixtures_path, "r") as f:
             cls.fixtures = json.load(f)
 
-        cls.pres_data = cls.fixtures["presentation_relationships"]["data"]["relationships"]
+        cls.pres_data = cls.fixtures["presentation_relationships"]["data"][
+            "relationships"
+        ]
         cls.concepts_data = cls.fixtures["sample_concepts"]["data"]
 
     def test_find_root_nodes(self):
@@ -62,13 +72,13 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
 
         # Root nodes are those not referenced as children
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         assert len(root_concepts) > 0
-        assert 'us-gaap:StatementOfFinancialPositionAbstract' in root_concepts
+        assert "us-gaap:StatementOfFinancialPositionAbstract" in root_concepts
 
     def test_build_simple_tree(self):
         """Test building a simple presentation tree."""
@@ -76,7 +86,7 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         # Build tree for first root
@@ -94,7 +104,7 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         if root_concepts:
@@ -111,7 +121,7 @@ class TestPresentationExtraction:
             # Should have proper depth progression
             for i in range(1, len(traversal)):
                 node, depth = traversal[i]
-                prev_node, prev_depth = traversal[i-1]
+                prev_node, prev_depth = traversal[i - 1]
 
                 # Depth should not increase by more than 1
                 assert depth <= prev_depth + 1
@@ -122,7 +132,7 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         if root_concepts:
@@ -143,7 +153,7 @@ class TestPresentationExtraction:
         concrete_concepts = []
 
         for concept_name in self.pres_data.keys():
-            if 'Abstract' in concept_name:
+            if "Abstract" in concept_name:
                 abstract_concepts.append(concept_name)
             else:
                 concrete_concepts.append(concept_name)
@@ -165,8 +175,8 @@ class TestPresentationExtraction:
         for fact_id, fact_data in facts_data.items():
             # Check all contexts
             for key, value in fact_data.items():
-                if key != 'v' and isinstance(value, dict):
-                    concept = value.get('c')
+                if key != "v" and isinstance(value, dict):
+                    concept = value.get("c")
                     if concept:
                         fact_concepts.add(concept)
 
@@ -175,7 +185,7 @@ class TestPresentationExtraction:
         for parent in self.pres_data.keys():
             pres_concepts.add(parent)
             for child in self.pres_data[parent]:
-                pres_concepts.add(child['t'])
+                pres_concepts.add(child["t"])
 
         # Find overlap
         concepts_with_facts = pres_concepts.intersection(fact_concepts)
@@ -196,11 +206,15 @@ class TestPresentationExtraction:
             first_fact = facts_data[first_fact_id]
 
             # Get first context
-            context_keys = [k for k in first_fact.keys() if k != 'v' and isinstance(first_fact[k], dict)]
+            context_keys = [
+                k
+                for k in first_fact.keys()
+                if k != "v" and isinstance(first_fact[k], dict)
+            ]
             if context_keys:
                 context = first_fact[context_keys[0]]
-                test_concept = context.get('c')
-                test_period = context.get('p')
+                test_concept = context.get("c")
+                test_period = context.get("p")
 
                 # Search for matching fact
                 found_fact = self._find_fact_for_concept_period(
@@ -208,8 +222,8 @@ class TestPresentationExtraction:
                 )
 
                 assert found_fact is not None
-                assert found_fact['concept'] == test_concept
-                assert found_fact['period'] == test_period
+                assert found_fact["concept"] == test_concept
+                assert found_fact["period"] == test_period
 
     def test_handle_circular_references(self):
         """Test handling potential circular references in presentation tree."""
@@ -217,7 +231,7 @@ class TestPresentationExtraction:
         circular_data = {
             "concept-a": [{"t": "concept-b"}],
             "concept-b": [{"t": "concept-c"}],
-            "concept-c": [{"t": "concept-a"}]  # Circular reference
+            "concept-c": [{"t": "concept-a"}],  # Circular reference
         }
 
         # Build tree with cycle detection
@@ -235,7 +249,7 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         if root_concepts:
@@ -267,7 +281,7 @@ class TestPresentationExtraction:
         all_children = set()
         for parent, children in self.pres_data.items():
             for child in children:
-                all_children.add(child['t'])
+                all_children.add(child["t"])
         root_concepts = [c for c in self.pres_data.keys() if c not in all_children]
 
         # Build trees for all roots
@@ -277,13 +291,13 @@ class TestPresentationExtraction:
             trees.append(tree)
 
         statements[role_id] = {
-            'name': role_name,
-            'trees': trees,
-            'total_concepts': sum(len(tree.get_all_concepts()) for tree in trees)
+            "name": role_name,
+            "trees": trees,
+            "total_concepts": sum(len(tree.get_all_concepts()) for tree in trees),
         }
 
         assert len(statements) == 1
-        assert statements[role_id]['total_concepts'] > 0
+        assert statements[role_id]["total_concepts"] > 0
 
     def test_extract_period_information(self):
         """Test extracting period information from facts."""
@@ -292,8 +306,8 @@ class TestPresentationExtraction:
         periods_found = set()
         for fact_id, fact_data in facts_data.items():
             for key, value in fact_data.items():
-                if key != 'v' and isinstance(value, dict):
-                    period = value.get('p')
+                if key != "v" and isinstance(value, dict):
+                    period = value.get("p")
                     if period:
                         periods_found.add(period)
 
@@ -310,7 +324,7 @@ class TestPresentationExtraction:
         concepts_data = self.fixtures["sample_concepts"]["data"]
 
         for concept_name, concept_info in concepts_data.items():
-            labels = concept_info.get('labels', {})
+            labels = concept_info.get("labels", {})
 
             # Should have at least one label
             if labels:
@@ -321,28 +335,30 @@ class TestPresentationExtraction:
 
     # Helper methods for testing
 
-    def _build_tree_node(self, concept: str, pres_data: Dict[str, Any],
-                        depth: int = 0) -> PresentationNode:
+    def _build_tree_node(
+        self, concept: str, pres_data: Dict[str, Any], depth: int = 0
+    ) -> PresentationNode:
         """Build tree node recursively."""
         # Create node
         node = PresentationNode(
             concept=concept,
-            label=concept.split(':')[-1] if ':' in concept else concept,
+            label=concept.split(":")[-1] if ":" in concept else concept,
             depth=depth,
-            abstract='Abstract' in concept
+            abstract="Abstract" in concept,
         )
 
         # Add children
         if concept in pres_data:
             for child_rel in pres_data[concept]:
-                child_concept = child_rel['t']
+                child_concept = child_rel["t"]
                 child_node = self._build_tree_node(child_concept, pres_data, depth + 1)
                 node.children.append(child_node)
 
         return node
 
-    def _build_tree_node_safe(self, concept: str, pres_data: Dict[str, Any],
-                             visited: Set[str], depth: int = 0) -> PresentationNode:
+    def _build_tree_node_safe(
+        self, concept: str, pres_data: Dict[str, Any], visited: Set[str], depth: int = 0
+    ) -> PresentationNode:
         """Build tree node with cycle detection."""
         if concept in visited or depth > 10:  # Prevent infinite recursion
             return PresentationNode(concept=concept, depth=depth)
@@ -351,15 +367,15 @@ class TestPresentationExtraction:
 
         node = PresentationNode(
             concept=concept,
-            label=concept.split(':')[-1] if ':' in concept else concept,
+            label=concept.split(":")[-1] if ":" in concept else concept,
             depth=depth,
-            abstract='Abstract' in concept
+            abstract="Abstract" in concept,
         )
 
         # Add children
         if concept in pres_data:
             for child_rel in pres_data[concept]:
-                child_concept = child_rel['t']
+                child_concept = child_rel["t"]
                 child_node = self._build_tree_node_safe(
                     child_concept, pres_data, visited.copy(), depth + 1
                 )
@@ -367,8 +383,9 @@ class TestPresentationExtraction:
 
         return node
 
-    def _calculate_max_depth(self, concept: str, pres_data: Dict[str, Any],
-                           visited: Set[str], depth: int = 0) -> int:
+    def _calculate_max_depth(
+        self, concept: str, pres_data: Dict[str, Any], visited: Set[str], depth: int = 0
+    ) -> int:
         """Calculate maximum depth of tree."""
         if concept in visited or depth > 20:
             return depth
@@ -378,7 +395,7 @@ class TestPresentationExtraction:
 
         if concept in pres_data:
             for child_rel in pres_data[concept]:
-                child_concept = child_rel['t']
+                child_concept = child_rel["t"]
                 child_depth = self._calculate_max_depth(
                     child_concept, pres_data, visited.copy(), depth + 1
                 )
@@ -386,34 +403,34 @@ class TestPresentationExtraction:
 
         return max_child_depth
 
-    def _find_fact_for_concept_period(self, concept: str, period: str,
-                                     facts_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _find_fact_for_concept_period(
+        self, concept: str, period: str, facts_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Find fact for specific concept and period."""
         for fact_id, fact_data in facts_data.items():
             for key, value in fact_data.items():
-                if key != 'v' and isinstance(value, dict):
-                    if (value.get('c') == concept and
-                        value.get('p') == period):
+                if key != "v" and isinstance(value, dict):
+                    if value.get("c") == concept and value.get("p") == period:
                         return {
-                            'fact_id': fact_id,
-                            'concept': concept,
-                            'period': period,
-                            'value': fact_data.get('v'),
-                            'unit': value.get('m'),
-                            'entity': value.get('e')
+                            "fact_id": fact_id,
+                            "concept": concept,
+                            "period": period,
+                            "value": fact_data.get("v"),
+                            "unit": value.get("m"),
+                            "entity": value.get("e"),
                         }
         return None
 
     def _get_best_label(self, concept_info: Dict[str, Any]) -> str:
         """Get best available label for concept."""
-        labels = concept_info.get('labels', {})
+        labels = concept_info.get("labels", {})
 
         # Preference order: std > ns0 > any other
-        for label_type in ['std', 'ns0']:
+        for label_type in ["std", "ns0"]:
             if label_type in labels:
                 label_data = labels[label_type]
                 if isinstance(label_data, dict):
-                    return label_data.get('en-us', '')
+                    return label_data.get("en-us", "")
                 else:
                     return str(label_data)
 
@@ -421,11 +438,11 @@ class TestPresentationExtraction:
         if labels:
             first_label = list(labels.values())[0]
             if isinstance(first_label, dict):
-                return first_label.get('en-us', '')
+                return first_label.get("en-us", "")
             else:
                 return str(first_label)
 
-        return concept_info.get('name', 'Unknown')
+        return concept_info.get("name", "Unknown")
 
 
 if __name__ == "__main__":

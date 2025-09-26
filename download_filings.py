@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import List, Optional
 
 # Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from sec_downloader import FilingSearch, FilingDownload, EdgarClient
 from sec_downloader.models import SearchFilters, DownloadConfig
@@ -40,35 +40,37 @@ def setup_logging(verbose: bool) -> None:
 
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[logging.StreamHandler()]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler()],
     )
 
     # Suppress verbose output from external libraries
     if not verbose:
-        logging.getLogger('urllib3').setLevel(logging.WARNING)
-        logging.getLogger('requests').setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("requests").setLevel(logging.WARNING)
 
 
 def parse_form_types(form_string: str) -> List[str]:
     """Parse comma-separated form types."""
-    return [form.strip().upper() for form in form_string.split(',')]
+    return [form.strip().upper() for form in form_string.split(",")]
 
 
 def parse_date(date_string: str) -> datetime:
     """Parse date string in YYYY-MM-DD format."""
     try:
-        return datetime.strptime(date_string, '%Y-%m-%d')
+        return datetime.strptime(date_string, "%Y-%m-%d")
     except ValueError:
-        raise argparse.ArgumentTypeError(f"Invalid date format: {date_string}. Use YYYY-MM-DD")
+        raise argparse.ArgumentTypeError(
+            f"Invalid date format: {date_string}. Use YYYY-MM-DD"
+        )
 
 
 def read_ticker_file(file_path: Path) -> List[str]:
     """Read ticker symbols from file (one per line)."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             tickers = [line.strip().upper() for line in f if line.strip()]
-        return [ticker for ticker in tickers if ticker and not ticker.startswith('#')]
+        return [ticker for ticker in tickers if ticker and not ticker.startswith("#")]
     except Exception as e:
         raise argparse.ArgumentTypeError(f"Error reading ticker file {file_path}: {e}")
 
@@ -90,100 +92,88 @@ Form Types:
   10-Q    Quarterly report
 
 Note: Use --include-amendments to also download 10-K/A and 10-Q/A filings.
-        """
+        """,
     )
 
     # Input source (mutually exclusive)
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument(
-        '--ticker',
-        help='Company ticker symbol (e.g., AAPL, MSFT)'
+        "--ticker", help="Company ticker symbol (e.g., AAPL, MSFT)"
     )
+    input_group.add_argument("--cik", help="Company Central Index Key (CIK)")
     input_group.add_argument(
-        '--cik',
-        help='Company Central Index Key (CIK)'
-    )
-    input_group.add_argument(
-        '--input-file',
-        type=Path,
-        help='File containing ticker symbols (one per line)'
+        "--input-file", type=Path, help="File containing ticker symbols (one per line)"
     )
 
     # Filing selection
     parser.add_argument(
-        '--form',
-        default='10-K,10-Q',
-        help='Form types to download (comma-separated, default: 10-K,10-Q)'
+        "--form",
+        default="10-K,10-Q",
+        help="Form types to download (comma-separated, default: 10-K,10-Q)",
     )
     parser.add_argument(
-        '--count',
-        type=int,
-        help='Maximum number of filings to download per company'
+        "--count", type=int, help="Maximum number of filings to download per company"
     )
     parser.add_argument(
-        '--start-date',
+        "--start-date",
         type=parse_date,
-        help='Start date for filing search (YYYY-MM-DD)'
+        help="Start date for filing search (YYYY-MM-DD)",
     )
     parser.add_argument(
-        '--end-date',
-        type=parse_date,
-        help='End date for filing search (YYYY-MM-DD)'
+        "--end-date", type=parse_date, help="End date for filing search (YYYY-MM-DD)"
     )
     parser.add_argument(
-        '--include-amendments',
-        action='store_true',
-        help='Include amendment filings (10-K/A, 10-Q/A)'
+        "--include-amendments",
+        action="store_true",
+        help="Include amendment filings (10-K/A, 10-Q/A)",
     )
 
     # Output options
     parser.add_argument(
-        '--output-dir',
+        "--output-dir",
         type=Path,
-        default=Path('./downloads'),
-        help='Output directory for downloaded filings (default: ./downloads)'
+        default=Path("./downloads"),
+        help="Output directory for downloaded filings (default: ./downloads)",
     )
     parser.add_argument(
-        '--include-exhibits',
-        action='store_true',
-        help='Download exhibit files in addition to primary documents'
+        "--include-exhibits",
+        action="store_true",
+        help="Download exhibit files in addition to primary documents",
     )
     parser.add_argument(
-        '--flat-structure',
-        action='store_true',
-        help='Use flat directory structure instead of company/filing subdirectories'
+        "--flat-structure",
+        action="store_true",
+        help="Use flat directory structure instead of company/filing subdirectories",
     )
 
     # Processing options
     parser.add_argument(
-        '--max-parallel',
+        "--max-parallel",
         type=int,
         default=3,
-        help='Maximum parallel downloads (default: 3)'
+        help="Maximum parallel downloads (default: 3)",
     )
     parser.add_argument(
-        '--timeout',
+        "--timeout",
         type=int,
         default=30,
-        help='Download timeout in seconds (default: 30)'
+        help="Download timeout in seconds (default: 30)",
     )
     parser.add_argument(
-        '--retries',
+        "--retries",
         type=int,
         default=3,
-        help='Number of retry attempts for failed downloads (default: 3)'
+        help="Number of retry attempts for failed downloads (default: 3)",
     )
 
     # Logging and output
     parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose logging'
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
     parser.add_argument(
-        '--quiet',
-        action='store_true',
-        help='Suppress progress bars and non-essential output'
+        "--quiet",
+        action="store_true",
+        help="Suppress progress bars and non-essential output",
     )
 
     return parser
@@ -250,7 +240,7 @@ def main():
             start_date=args.start_date,
             end_date=args.end_date,
             include_amendments=args.include_amendments,
-            max_results=args.count
+            max_results=args.count,
         )
 
         # Create download config
@@ -260,7 +250,7 @@ def main():
             include_exhibits=args.include_exhibits,
             max_parallel=args.max_parallel,
             retry_attempts=args.retries,
-            timeout_seconds=args.timeout
+            timeout_seconds=args.timeout,
         )
 
         # Initialize components
@@ -295,9 +285,7 @@ def main():
 
         # Download filings
         results = downloader.download_filings(
-            all_filings,
-            download_config,
-            show_progress=not args.quiet
+            all_filings, download_config, show_progress=not args.quiet
         )
 
         # Generate summary
@@ -312,9 +300,9 @@ def main():
         print(f"   Total files: {summary['total_files_downloaded']}")
         print(f"   Total size: {summary['total_size_mb']:.1f} MB")
 
-        if summary['failed_downloads'] > 0:
+        if summary["failed_downloads"] > 0:
             print(f"\n❌ Failed downloads:")
-            for error in summary['errors']:
+            for error in summary["errors"]:
                 print(f"   • {error}")
 
         # Print successful downloads with paths
@@ -328,7 +316,7 @@ def main():
         print(f"\n📁 Files saved to: {args.output_dir.absolute()}")
 
         # Return appropriate exit code
-        return 0 if summary['failed_downloads'] == 0 else 1
+        return 0 if summary["failed_downloads"] == 0 else 1
 
     except KeyboardInterrupt:
         print("\n⏹️  Download cancelled by user")
@@ -338,6 +326,7 @@ def main():
         print(f"❌ Error: {e}")
         if args.verbose:
             import traceback
+
             traceback.print_exc()
         return 1
 

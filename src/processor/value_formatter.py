@@ -1,8 +1,7 @@
-"""
-Value formatter for SEC financial data.
-"""
+"""Value formatter for SEC financial data."""
 
-from typing import Optional, Dict, Any
+import re
+from typing import Optional
 
 
 class ValueFormatter:
@@ -19,8 +18,13 @@ class ValueFormatter:
         self.currency = currency
         self.scale_millions = scale_millions
 
-    def format_cell_value(self, raw_value: Optional[float], unit: Optional[str],
-                         decimals: Optional[int], concept: Optional[str] = None) -> str:
+    def format_cell_value(
+        self,
+        raw_value: Optional[float],
+        unit: Optional[str],
+        decimals: Optional[int],
+        concept: Optional[str] = None,
+    ) -> str:
         """
         Format a single cell value according to its type and unit.
 
@@ -91,7 +95,9 @@ class ValueFormatter:
             return "percentage"
 
         # Ratios (no unit, decimal concept)
-        if not unit and any(term in concept_lower for term in ["ratio", "rate", "margin"]):
+        if not unit and any(
+            term in concept_lower for term in ["ratio", "rate", "margin"]
+        ):
             return "ratio"
 
         return "generic"
@@ -241,7 +247,7 @@ class ValueFormatter:
             return ""
 
         # Remove excessive whitespace
-        cleaned = re.sub(r'\s+', ' ', label.strip())
+        cleaned = re.sub(r"\s+", " ", label.strip())
 
         # Remove common prefixes that aren't needed for display
         prefixes_to_remove = [
@@ -252,7 +258,7 @@ class ValueFormatter:
 
         for prefix in prefixes_to_remove:
             if cleaned.lower().startswith(prefix):
-                cleaned = cleaned[len(prefix):]
+                cleaned = cleaned[len(prefix) :]
                 break
 
         return cleaned
@@ -271,7 +277,7 @@ class ValueFormatter:
             return ""
 
         # Extract year if it's a long date string
-        year_match = re.search(r'20\d{2}', period_label)
+        year_match = re.search(r"20\d{2}", period_label)
         if year_match:
             return year_match.group(0)
 

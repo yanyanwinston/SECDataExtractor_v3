@@ -60,11 +60,8 @@ class URLSource(FilingSource):
 
     def validate(self) -> bool:
         """Validate URL format."""
-        try:
-            result = urlparse(self.url)
-            return bool(result.netloc) and result.scheme in ('http', 'https')
-        except:
-            return False
+        result = urlparse(self.url)
+        return bool(result.netloc) and result.scheme in ("http", "https")
 
     def get_path(self) -> str:
         """Download URL and return local path."""
@@ -72,9 +69,7 @@ class URLSource(FilingSource):
             return str(self.temp_file)
 
         # Download the file with proper User-Agent for SEC
-        headers = {
-            'User-Agent': 'SECDataExtractor v3.0 user@example.com'
-        }
+        headers = {"User-Agent": "SECDataExtractor v3.0 user@example.com"}
         response = requests.get(self.url, headers=headers, timeout=30)
         response.raise_for_status()
 
@@ -113,11 +108,13 @@ class ZipSource(FilingSource):
         self.extract_dir.mkdir(exist_ok=True)
 
         # Extract ZIP
-        with zipfile.ZipFile(self.zip_path, 'r') as zip_ref:
+        with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
             zip_ref.extractall(self.extract_dir)
 
         # Find the main filing document (largest .htm/.html file)
-        html_files = list(self.extract_dir.glob('*.htm')) + list(self.extract_dir.glob('*.html'))
+        html_files = list(self.extract_dir.glob("*.htm")) + list(
+            self.extract_dir.glob("*.html")
+        )
 
         if not html_files:
             raise ValueError("No HTML files found in ZIP archive")
@@ -131,6 +128,7 @@ class ZipSource(FilingSource):
         """Remove extracted files."""
         if self.extract_dir and self.extract_dir.exists():
             import shutil
+
             shutil.rmtree(self.extract_dir)
 
 
@@ -144,7 +142,7 @@ class InputHandler:
         """Create appropriate FilingSource based on input type."""
 
         # URL
-        if input_path.startswith(('http://', 'https://')):
+        if input_path.startswith(("http://", "https://")):
             return URLSource(input_path, self.temp_dir)
 
         # Local file
@@ -154,7 +152,7 @@ class InputHandler:
             raise FileNotFoundError(f"Input file not found: {input_path}")
 
         # ZIP archive
-        if input_path.lower().endswith('.zip'):
+        if input_path.lower().endswith(".zip"):
             return ZipSource(input_path, self.temp_dir)
 
         # Regular file
@@ -163,16 +161,11 @@ class InputHandler:
     def validate_filing(self, file_path: str) -> bool:
         """Basic validation that file looks like an iXBRL filing."""
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read(10000)  # Read first 10KB
 
             # Check for basic iXBRL/HTML indicators
-            indicators = [
-                '<html',
-                'xbrl',
-                'edgar',
-                'sec.gov'
-            ]
+            indicators = ["<html", "xbrl", "edgar", "sec.gov"]
 
             content_lower = content.lower()
             return any(indicator in content_lower for indicator in indicators)

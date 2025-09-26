@@ -6,7 +6,7 @@ Provides high-level interface for searching and filtering SEC filings.
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from .models import Company, Filing, SearchFilters
 from .edgar_client import EdgarClient, EdgarError
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class FilingSearchError(Exception):
     """Exception raised during filing search operations."""
+
     pass
 
 
@@ -39,9 +40,7 @@ class FilingSearch:
         self.client = edgar_client or EdgarClient()
 
     def search_by_ticker(
-        self,
-        ticker: str,
-        filters: Optional[SearchFilters] = None
+        self, ticker: str, filters: Optional[SearchFilters] = None
     ) -> List[Filing]:
         """
         Search for filings by ticker symbol.
@@ -73,7 +72,7 @@ class FilingSearch:
                 form_types=filters.expanded_form_types,
                 start_date=filters.start_date,
                 end_date=filters.end_date,
-                max_results=filters.max_results
+                max_results=filters.max_results,
             )
 
             # Update ticker information in filings
@@ -92,9 +91,7 @@ class FilingSearch:
             raise FilingSearchError(f"Unexpected error searching for {ticker}: {e}")
 
     def search_by_cik(
-        self,
-        cik: str,
-        filters: Optional[SearchFilters] = None
+        self, cik: str, filters: Optional[SearchFilters] = None
     ) -> List[Filing]:
         """
         Search for filings by CIK.
@@ -124,7 +121,7 @@ class FilingSearch:
                 form_types=filters.expanded_form_types,
                 start_date=filters.start_date,
                 end_date=filters.end_date,
-                max_results=filters.max_results
+                max_results=filters.max_results,
             )
 
             # Update company information in filings if available
@@ -144,9 +141,7 @@ class FilingSearch:
             raise FilingSearchError(f"Unexpected error searching for CIK {cik}: {e}")
 
     def search(
-        self,
-        identifier: str,
-        filters: Optional[SearchFilters] = None
+        self, identifier: str, filters: Optional[SearchFilters] = None
     ) -> List[Filing]:
         """
         Search for filings by ticker or CIK (auto-detect).
@@ -170,10 +165,7 @@ class FilingSearch:
             return self.search_by_ticker(identifier, filters)
 
     def get_latest_filing(
-        self,
-        identifier: str,
-        form_type: str,
-        filters: Optional[SearchFilters] = None
+        self, identifier: str, form_type: str, filters: Optional[SearchFilters] = None
     ) -> Optional[Filing]:
         """
         Get the most recent filing of a specific type.
@@ -194,10 +186,7 @@ class FilingSearch:
         return filings[0] if filings else None
 
     def get_filings_by_year(
-        self,
-        identifier: str,
-        year: int,
-        form_types: Optional[List[str]] = None
+        self, identifier: str, year: int, form_types: Optional[List[str]] = None
     ) -> List[Filing]:
         """
         Get all filings for a specific year.
@@ -213,16 +202,13 @@ class FilingSearch:
         filters = SearchFilters(
             form_types=form_types or ["10-K", "10-Q"],
             start_date=datetime(year, 1, 1),
-            end_date=datetime(year, 12, 31)
+            end_date=datetime(year, 12, 31),
         )
 
         return self.search(identifier, filters)
 
     def get_quarterly_filings(
-        self,
-        identifier: str,
-        year: int,
-        quarters: Optional[List[int]] = None
+        self, identifier: str, year: int, quarters: Optional[List[int]] = None
     ) -> List[Filing]:
         """
         Get 10-Q filings for specific quarters.
@@ -238,7 +224,7 @@ class FilingSearch:
         filters = SearchFilters(
             form_types=["10-Q"],
             start_date=datetime(year, 1, 1),
-            end_date=datetime(year, 12, 31)
+            end_date=datetime(year, 12, 31),
         )
 
         filings = self.search(identifier, filters)
@@ -259,7 +245,7 @@ class FilingSearch:
         self,
         identifier: str,
         years: Optional[List[int]] = None,
-        include_amendments: bool = False
+        include_amendments: bool = False,
     ) -> List[Filing]:
         """
         Get 10-K filings for specific years.
@@ -273,8 +259,7 @@ class FilingSearch:
             List of 10-K Filing objects
         """
         filters = SearchFilters(
-            form_types=["10-K"],
-            include_amendments=include_amendments
+            form_types=["10-K"], include_amendments=include_amendments
         )
 
         if years:
@@ -285,7 +270,7 @@ class FilingSearch:
                     form_types=["10-K"],
                     include_amendments=include_amendments,
                     start_date=datetime(year, 1, 1),
-                    end_date=datetime(year, 12, 31)
+                    end_date=datetime(year, 12, 31),
                 )
                 year_filings = self.search(identifier, year_filters)
                 all_filings.extend(year_filings)

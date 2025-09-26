@@ -5,7 +5,13 @@ from pathlib import Path
 
 import openpyxl
 
-from src.processor.data_models import Period, Cell, Row, Statement, ProcessingResult
+from src.processor.data_models import (
+    Cell,
+    Period,
+    ProcessingResult,
+    Row,
+    Statement,
+)
 from src.processor.presentation_models import PresentationNode
 from src.processor.excel_generator import ExcelGenerator
 
@@ -123,17 +129,20 @@ def test_excel_generator_applies_presentation_formatting(tmp_path):
     # Negative row uses currency formatting and remains right aligned
     loss_value_cell = ws.cell(row=label_rows["Operating Loss"], column=2)
     assert loss_value_cell.value == -500000.0
-    assert loss_value_cell.number_format == '#,##0.0_);(#,##0.0)'
+    assert loss_value_cell.number_format == "#,##0.0_);(#,##0.0)"
 
     # Total row should have a top border and bold label
     total_label_cell = ws.cell(row=label_rows["Total Assets"], column=1)
     total_value_cell = ws.cell(row=label_rows["Total Assets"], column=2)
     assert total_label_cell.font.bold is True
-    assert total_value_cell.border.top.style == 'thin'
-    assert total_value_cell.number_format == '#,##0.0_);(#,##0.0)'
+    assert total_value_cell.border.top.style == "thin"
+    assert total_value_cell.number_format == "#,##0.0_);(#,##0.0)"
 
     # Data cell should be numeric after raw_value handling
-    assert ws.cell(row=label_rows["Cash and Cash Equivalents"], column=2).value == 1234000.0
+    assert (
+        ws.cell(row=label_rows["Cash and Cash Equivalents"], column=2).value
+        == 1234000.0
+    )
 
 
 def test_excel_generator_creates_summary_sheet(tmp_path):
@@ -165,9 +174,7 @@ def test_excel_generator_creates_summary_sheet(tmp_path):
     assert summary_ws["A7"].value == "Financial Statements"
 
     # Ensure each statement is listed with counts
-    listed_statements = {
-        summary_ws[f"A{row}"].value for row in range(9, 11)
-    }
+    listed_statements = {summary_ws[f"A{row}"].value for row in range(9, 11)}
     assert any("Balance Sheet" in entry for entry in listed_statements if entry)
     assert any("Income Statement" in entry for entry in listed_statements if entry)
 

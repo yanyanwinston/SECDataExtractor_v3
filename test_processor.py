@@ -12,15 +12,20 @@ false failures now that the pipeline requires full viewer JSON input.
 import pytest
 
 
-pytestmark = pytest.mark.skip(reason="Legacy manual integration harness not compatible with automated pytest run")
+pytestmark = pytest.mark.skip(
+    reason="Legacy manual integration harness not compatible with automated pytest run"
+)
 
 import json
 import tempfile
 from pathlib import Path
 
 from src.processor import (
-    ViewerDataExtractor, DataParser, ValueFormatter,
-    ExcelGenerator, ProcessingResult
+    ViewerDataExtractor,
+    DataParser,
+    ValueFormatter,
+    ExcelGenerator,
+    ProcessingResult,
 )
 
 
@@ -33,57 +38,40 @@ def create_mock_viewer_data():
                 "v": 120000000000,  # $120B
                 "u": "usd",
                 "d": -6,
-                "context": "ctx_2023"
+                "context": "ctx_2023",
             },
             "fact_2": {
                 "c": "us-gaap:Liabilities",
                 "v": 80000000000,  # $80B
                 "u": "usd",
                 "d": -6,
-                "context": "ctx_2023"
+                "context": "ctx_2023",
             },
             "fact_3": {
                 "c": "us-gaap:StockholdersEquity",
                 "v": 40000000000,  # $40B
                 "u": "usd",
                 "d": -6,
-                "context": "ctx_2023"
+                "context": "ctx_2023",
             },
             "fact_4": {
                 "c": "dei:EntityRegistrantName",
                 "v": "Tesla, Inc.",
-                "context": "ctx_company"
-            }
+                "context": "ctx_company",
+            },
         },
         "contexts": {
-            "ctx_2023": {
-                "period": {
-                    "instant": "2023-12-31"
-                }
-            },
-            "ctx_company": {
-                "period": {
-                    "instant": "2023-12-31"
-                }
-            }
+            "ctx_2023": {"period": {"instant": "2023-12-31"}},
+            "ctx_company": {"period": {"instant": "2023-12-31"}},
         },
         "concepts": {
-            "us-gaap:Assets": {
-                "label": "Total Assets",
-                "abstract": False
-            },
-            "us-gaap:Liabilities": {
-                "label": "Total Liabilities",
-                "abstract": False
-            },
+            "us-gaap:Assets": {"label": "Total Assets", "abstract": False},
+            "us-gaap:Liabilities": {"label": "Total Liabilities", "abstract": False},
             "us-gaap:StockholdersEquity": {
                 "label": "Stockholders Equity",
-                "abstract": False
+                "abstract": False,
             },
-            "dei:EntityRegistrantName": {
-                "label": "Company Name",
-                "abstract": False
-            }
+            "dei:EntityRegistrantName": {"label": "Company Name", "abstract": False},
         },
         "roles": {
             "http://example.com/role/BalanceSheet": {
@@ -91,10 +79,10 @@ def create_mock_viewer_data():
                 "presentation": [
                     {"concept": "us-gaap:Assets", "depth": 0},
                     {"concept": "us-gaap:Liabilities", "depth": 0},
-                    {"concept": "us-gaap:StockholdersEquity", "depth": 0}
-                ]
+                    {"concept": "us-gaap:StockholdersEquity", "depth": 0},
+                ],
             }
-        }
+        },
     }
 
 
@@ -115,7 +103,7 @@ def create_mock_html_with_json(json_data, html_path):
 </html>
 """
 
-    with open(html_path, 'w', encoding='utf-8') as f:
+    with open(html_path, "w", encoding="utf-8") as f:
         f.write(html_content)
 
 
@@ -126,7 +114,7 @@ def test_json_extraction():
     # Create mock data and HTML file
     mock_data = create_mock_viewer_data()
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.htm', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".htm", delete=False) as f:
         create_mock_html_with_json(mock_data, f.name)
         html_path = f.name
 
@@ -158,7 +146,9 @@ def test_data_parsing(viewer_data):
         print(f"   Statements: {len(result.statements)}")
 
         for stmt in result.statements:
-            print(f"     - {stmt.name}: {len(stmt.periods)} periods, {len(stmt.rows)} rows")
+            print(
+                f"     - {stmt.name}: {len(stmt.periods)} periods, {len(stmt.rows)} rows"
+            )
 
         return result
     else:
@@ -222,6 +212,7 @@ def main():
     except Exception as e:
         print(f"❌ Test failed with error: {e}")
         import traceback
+
         traceback.print_exc()
 
 

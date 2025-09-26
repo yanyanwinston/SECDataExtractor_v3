@@ -15,7 +15,7 @@ from .presentation_models import (
     PresentationStatement,
     StatementRow,
     StatementTable,
-    classify_statement_type
+    classify_statement_type,
 )
 from .presentation_parser import PresentationParser
 from .fact_matcher import FactMatcher
@@ -24,24 +24,24 @@ from .value_formatter import ValueFormatter
 from .excel_generator import ExcelGenerator
 
 __all__ = [
-    'InputHandler',
-    'FilingSource',
-    'ArelleProcessor',
-    'ViewerDataExtractor',
-    'Statement',
-    'Period',
-    'Row',
-    'Cell',
-    'ProcessingResult',
-    'StatementType',
-    'PresentationNode',
-    'PresentationStatement',
-    'StatementRow',
-    'StatementTable',
-    'classify_statement_type',
-    'PresentationParser',
-    'FactMatcher',
-    'DataParser',
-    'ValueFormatter',
-    'ExcelGenerator'
+    "InputHandler",
+    "FilingSource",
+    "ArelleProcessor",
+    "ViewerDataExtractor",
+    "Statement",
+    "Period",
+    "Row",
+    "Cell",
+    "ProcessingResult",
+    "StatementType",
+    "PresentationNode",
+    "PresentationStatement",
+    "StatementRow",
+    "StatementTable",
+    "classify_statement_type",
+    "PresentationParser",
+    "FactMatcher",
+    "DataParser",
+    "ValueFormatter",
+    "ExcelGenerator",
 ]

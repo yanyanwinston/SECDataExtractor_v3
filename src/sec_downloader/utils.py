@@ -21,7 +21,7 @@ def normalize_cik(cik: str) -> str:
         Normalized CIK string
     """
     # Remove any non-digit characters
-    cik_clean = re.sub(r'\D', '', str(cik))
+    cik_clean = re.sub(r"\D", "", str(cik))
 
     # Convert to int to remove leading zeros, then back to string
     try:
@@ -55,7 +55,7 @@ def parse_accession_number(accession: str) -> str:
         Normalized accession number with dashes
     """
     # Remove all non-alphanumeric characters
-    clean = re.sub(r'[^0-9]', '', accession)
+    clean = re.sub(r"[^0-9]", "", accession)
 
     # Should be 20 digits
     if len(clean) != 20:
@@ -88,18 +88,20 @@ def create_safe_filename(name: str, max_length: int = 100) -> str:
         Safe filename
     """
     # Replace problematic characters
-    safe = re.sub(r'[<>:"/\\|?*]', '_', name)
+    safe = re.sub(r'[<>:"/\\|?*]', "_", name)
 
     # Remove multiple spaces and underscores
-    safe = re.sub(r'[_\s]+', '_', safe)
+    safe = re.sub(r"[_\s]+", "_", safe)
 
     # Trim and ensure it's not too long
-    safe = safe.strip('_')[:max_length]
+    safe = safe.strip("_")[:max_length]
 
     return safe
 
 
-def validate_date_range(start_date: Optional[datetime], end_date: Optional[datetime]) -> None:
+def validate_date_range(
+    start_date: Optional[datetime], end_date: Optional[datetime]
+) -> None:
     """
     Validate date range parameters.
 
@@ -158,7 +160,7 @@ class RateLimiter:
     def __init__(self, max_requests: int = 10, time_window: float = 1.0):
         self.max_requests = max_requests
         self.time_window = time_window
-        self.requests = []
+        self.requests: list[float] = []
         self._lock = Lock()
 
     def wait_if_needed(self) -> None:
@@ -169,7 +171,11 @@ class RateLimiter:
             now = time.time()
 
             # Remove old requests outside the time window
-            self.requests = [req_time for req_time in self.requests if now - req_time < self.time_window]
+            self.requests = [
+                req_time
+                for req_time in self.requests
+                if now - req_time < self.time_window
+            ]
 
             if len(self.requests) >= self.max_requests:
                 sleep_time = self.time_window - (now - self.requests[0]) + 0.1
@@ -177,7 +183,9 @@ class RateLimiter:
                     time.sleep(sleep_time)
                     now = time.time()
                     self.requests = [
-                        req_time for req_time in self.requests if now - req_time < self.time_window
+                        req_time
+                        for req_time in self.requests
+                        if now - req_time < self.time_window
                     ]
 
             self.requests.append(now)

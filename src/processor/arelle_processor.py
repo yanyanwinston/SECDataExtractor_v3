@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ArelleError(Exception):
     """Exception for Arelle processing errors."""
+
     pass
 
 
@@ -31,7 +32,7 @@ class ArelleProcessor:
         self.temp_dir = temp_dir or Path(tempfile.gettempdir())
         self.timeout = timeout
 
-    def generate_viewer_html(self, filing_path: str) -> str:
+    def generate_viewer_html(self, filing_path: str | Path) -> str:
         """
         Generate iXBRL viewer HTML using Arelle.
 
@@ -44,15 +45,15 @@ class ArelleProcessor:
         Raises:
             ArelleError: If Arelle processing fails
         """
-        filing_path = Path(filing_path)
+        filing_path_path = Path(filing_path)
 
-        if not filing_path.exists():
-            raise ArelleError(f"Filing file not found: {filing_path}")
+        if not filing_path_path.exists():
+            raise ArelleError(f"Filing file not found: {filing_path_path}")
 
-        filing_path = filing_path.resolve()
+        filing_path_resolved = filing_path_path.resolve()
 
         # Create output directory
-        output_dir = self.temp_dir / f"arelle_output_{hash(str(filing_path)) % 10000}"
+        output_dir = self.temp_dir / f"arelle_output_{hash(str(filing_path_resolved)) % 10000}"
         output_dir.mkdir(exist_ok=True)
 
         viewer_file = output_dir / "ixbrl-viewer.htm"
@@ -60,10 +61,15 @@ class ArelleProcessor:
         try:
             # Build Arelle command
             cmd = [
-                "python", "-m", "arelle.CntlrCmdLine",
-                "--plugins", "iXBRLViewerPlugin",
-                "--file", str(filing_path),
-                "--save-viewer", str(viewer_file)
+                "python",
+                "-m",
+                "arelle.CntlrCmdLine",
+                "--plugins",
+                "iXBRLViewerPlugin",
+                "--file",
+                str(filing_path_resolved),
+                "--save-viewer",
+                str(viewer_file),
             ]
 
             logger.info(f"Running Arelle command: {' '.join(cmd)}")
@@ -74,7 +80,7 @@ class ArelleProcessor:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
-                cwd=output_dir
+                cwd=output_dir,
             )
 
             if result.returncode != 0:
@@ -90,7 +96,9 @@ class ArelleProcessor:
             return str(viewer_file)
 
         except subprocess.TimeoutExpired:
-            raise ArelleError(f"Arelle processing timed out after {self.timeout} seconds")
+            raise ArelleError(
+                f"Arelle processing timed out after {self.timeout} seconds"
+            )
         except subprocess.SubprocessError as e:
             raise ArelleError(f"Arelle subprocess error: {e}")
         except Exception as e:
@@ -109,7 +117,7 @@ class ArelleProcessor:
                 ["python", "-m", "arelle.CntlrCmdLine", "--help"],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
             )
 
             if basic_result.returncode != 0:
@@ -118,10 +126,17 @@ class ArelleProcessor:
 
             # Try to check plugin availability by testing with plugin flag
             plugin_result = subprocess.run(
-                ["python", "-m", "arelle.CntlrCmdLine", "--plugins", "iXBRLViewerPlugin", "--help"],
+                [
+                    "python",
+                    "-m",
+                    "arelle.CntlrCmdLine",
+                    "--plugins",
+                    "iXBRLViewerPlugin",
+                    "--help",
+                ],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
             )
 
             # If plugin command works, check for save-viewer option
@@ -131,10 +146,16 @@ class ArelleProcessor:
 
             # Fallback: if basic Arelle works, assume plugin is available
             # This handles cases where plugin help doesn't work but plugin itself does
-            logger.debug("Plugin check inconclusive, assuming available since basic Arelle works")
+            logger.debug(
+                "Plugin check inconclusive, assuming available since basic Arelle works"
+            )
             return True
 
-        except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        except (
+            subprocess.SubprocessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ) as e:
             logger.debug(f"Arelle availability check failed: {e}")
             return False
 
@@ -153,7 +174,7 @@ class ArelleProcessor:
                 ["pip", "install", "arelle"],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
             )
 
             if result.returncode != 0:

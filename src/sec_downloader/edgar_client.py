@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 class EdgarError(Exception):
     """Base exception for EDGAR API errors."""
+
     pass
 
 
@@ -62,7 +63,7 @@ class EdgarClient:
             total=3,
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"]
+            allowed_methods=["GET"],
         )
 
         adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -70,18 +71,17 @@ class EdgarClient:
         self.session.mount("https://", adapter)
 
         # Set required headers
-        self.session.headers.update({
-            'User-Agent': self.user_agent,
-            'Accept-Encoding': 'gzip, deflate',
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": self.user_agent,
+                "Accept-Encoding": "gzip, deflate",
+            }
+        )
 
         logger.info(f"Initialized EDGAR client with User-Agent: {self.user_agent}")
 
     def _make_request(
-        self,
-        url: str,
-        allowed_status: Optional[Sequence[int]] = None,
-        **kwargs
+        self, url: str, allowed_status: Optional[Sequence[int]] = None, **kwargs
     ) -> requests.Response:
         """
         Make rate-limited HTTP request.
@@ -130,7 +130,7 @@ class EdgarClient:
             try:
                 response = self._make_request(url)
 
-                if url.endswith('.json'):
+                if url.endswith(".json"):
                     try:
                         data = response.json()
                     except json.JSONDecodeError as exc:
@@ -139,19 +139,21 @@ class EdgarClient:
 
                     entries = data.values() if isinstance(data, dict) else data
                     for entry in entries:
-                        ticker_value = (entry.get('ticker') or '').upper().strip()
+                        ticker_value = (entry.get("ticker") or "").upper().strip()
                         if not ticker_value:
                             continue
 
-                        cik_value = str(entry.get('cik_str') or entry.get('cik') or '').strip()
+                        cik_value = str(
+                            entry.get("cik_str") or entry.get("cik") or ""
+                        ).strip()
                         if not cik_value:
                             continue
 
                         company = Company(
                             cik=cik_value.zfill(10),
                             ticker=ticker_value,
-                            name=entry.get('title'),
-                            exchange=entry.get('exchange')
+                            name=entry.get("title"),
+                            exchange=entry.get("exchange"),
                         )
                         self._ticker_cache[ticker_value] = company
 
@@ -161,7 +163,7 @@ class EdgarClient:
                 # Fallback plain-text format (pipe-delimited)
                 text = response.text
                 for line in text.splitlines():
-                    parts = [part.strip() for part in line.split('|')]
+                    parts = [part.strip() for part in line.split("|")]
                     if len(parts) < 3:
                         continue
                     cik_value, ticker_value, name_value = parts[:3]
@@ -170,9 +172,7 @@ class EdgarClient:
 
                     ticker_upper = ticker_value.upper()
                     company = Company(
-                        cik=cik_value.zfill(10),
-                        ticker=ticker_upper,
-                        name=name_value
+                        cik=cik_value.zfill(10), ticker=ticker_upper, name=name_value
                     )
                     self._ticker_cache[ticker_upper] = company
 
@@ -240,20 +240,16 @@ class EdgarClient:
             response = self._make_request(url)
             facts_data = response.json()
 
-            company_info = facts_data.get('entityName', '')
+            company_info = facts_data.get("entityName", "")
             ticker = None
 
             # Try to get ticker from recent filings
             # This is a best effort - not all companies have tickers
-            if 'facts' in facts_data:
+            if "facts" in facts_data:
                 # Look for trading symbol in company facts
                 pass  # Complex logic could go here
 
-            company = Company(
-                cik=cik,
-                ticker=ticker,
-                name=company_info
-            )
+            company = Company(cik=cik, ticker=ticker, name=company_info)
             logger.info(f"Found company: {company}")
             return company
 
@@ -279,7 +275,7 @@ class EdgarClient:
             if response.status_code == 404:
                 logger.warning(
                     "Submissions endpoint returned 404 for CIK %s; falling back to legacy feed",
-                    cik
+                    cik,
                 )
                 return self._get_company_submissions_atom(cik)
             return response.json()
@@ -290,8 +286,6 @@ class EdgarClient:
     def _get_company_submissions_atom(self, cik: str) -> Dict[str, Any]:
         """Fallback to the legacy ATOM feed when the submissions API is unavailable."""
 
-        import xml.etree.ElementTree as ET
-
         atom_url = (
             f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={cik}"
             "&type=&dateb=&owner=exclude&count=100&output=atom"
@@ -299,77 +293,84 @@ class EdgarClient:
 
         try:
             response = self._make_request(atom_url)
-            atom_text = response.text
-            root = ET.fromstring(atom_text)
-            ns = '{http://www.w3.org/2005/Atom}'
-
-            filings: List[Dict[str, Any]] = []
-
-            for entry in root.findall(f'.//{ns}entry'):
-                title_elem = entry.find(f'.//{ns}title')
-                link_elem = entry.find(f'.//{ns}link')
-                updated_elem = entry.find(f'.//{ns}updated')
-
-                if title_elem is None or link_elem is None:
-                    continue
-
-                title = title_elem.text or ''
-                href = link_elem.get('href', '')
-                filing_date = ''
-                if updated_elem is not None and updated_elem.text:
-                    filing_date = updated_elem.text.split('T')[0]
-
-                accession = ''
-                if '/Archives/edgar/data/' in href:
-                    parts = href.split('/')
-                    for part in parts:
-                        if len(part) == 20 and part.replace('-', '').isdigit():
-                            accession = part
-                            break
-
-                form = ''
-                for category in entry.findall(f'.//{ns}category'):
-                    term = (category.get('term') or '').strip()
-                    label = (category.get('label') or '').lower()
-                    if not term:
-                        continue
-                    if label and 'form' not in label:
-                        continue
-                    form = term.upper()
-                    if form:
-                        break
-
-                if not form:
-                    title_upper = title.upper()
-                    for candidate in ('10-K/A', '10-Q/A', '10-K', '10-Q'):
-                        if candidate in title_upper:
-                            form = candidate
-                            break
-
-                primary_doc = href.split('/')[-1] if href else ''
-
-                filings.append({
-                    'accessionNumber': accession,
-                    'filingDate': filing_date,
-                    'form': form,
-                    'primaryDocument': primary_doc,
-                })
-
-            return {
-                'cik': cik,
-                'filings': {
-                    'recent': {
-                        'accessionNumber': [f['accessionNumber'] for f in filings],
-                        'filingDate': [f['filingDate'] for f in filings],
-                        'form': [f['form'] for f in filings],
-                        'primaryDocument': [f['primaryDocument'] for f in filings],
-                    }
-                }
-            }
-
+            return self._parse_atom_feed(response.text, cik)
         except Exception as e:
             logger.error(f"Failed to fetch ATOM submissions for CIK {cik}: {e}")
             raise EdgarError(f"Failed to fetch submissions for CIK {cik}: {e}")
+
+    def _parse_atom_feed(self, atom_text: str, cik: str) -> Dict[str, Any]:
+        """Parse the legacy ATOM feed into the submissions JSON structure."""
+
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(atom_text)
+        ns = "{http://www.w3.org/2005/Atom}"
+
+        filings: List[Dict[str, Any]] = []
+
+        for entry in root.findall(f".//{ns}entry"):
+            title_elem = entry.find(f".//{ns}title")
+            link_elem = entry.find(f".//{ns}link")
+            updated_elem = entry.find(f".//{ns}updated")
+
+            if title_elem is None or link_elem is None:
+                continue
+
+            title = title_elem.text or ""
+            href = link_elem.get("href", "")
+            filing_date = ""
+            if updated_elem is not None and updated_elem.text:
+                filing_date = updated_elem.text.split("T")[0]
+
+            accession = ""
+            if "/Archives/edgar/data/" in href:
+                parts = href.split("/")
+                for part in parts:
+                    if len(part) == 20 and part.replace("-", "").isdigit():
+                        accession = part
+                        break
+
+            form = ""
+            for category in entry.findall(f".//{ns}category"):
+                term = (category.get("term") or "").strip()
+                label = (category.get("label") or "").lower()
+                if not term:
+                    continue
+                if label and "form" not in label:
+                    continue
+                form = term.upper()
+                if form:
+                    break
+
+            if not form:
+                title_upper = title.upper()
+                for candidate in ("10-K/A", "10-Q/A", "10-K", "10-Q"):
+                    if candidate in title_upper:
+                        form = candidate
+                        break
+
+            primary_doc = href.split("/")[-1] if href else ""
+
+            filings.append(
+                {
+                    "accessionNumber": accession,
+                    "filingDate": filing_date,
+                    "form": form,
+                    "primaryDocument": primary_doc,
+                }
+            )
+
+        return {
+            "cik": cik,
+            "filings": {
+                "recent": {
+                    "accessionNumber": [f["accessionNumber"] for f in filings],
+                    "filingDate": [f["filingDate"] for f in filings],
+                    "form": [f["form"] for f in filings],
+                    "primaryDocument": [f["primaryDocument"] for f in filings],
+                }
+            },
+        }
 
     def search_filings(
         self,
@@ -377,7 +378,7 @@ class EdgarClient:
         form_types: List[str],
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        max_results: Optional[int] = None
+        max_results: Optional[int] = None,
     ) -> List[Filing]:
         """
         Search for filings by company and form type.
@@ -397,25 +398,25 @@ class EdgarClient:
 
         try:
             submissions = self.get_company_submissions(cik)
-            filings = []
+            filings: List[Filing] = []
 
-            recent_filings = submissions.get('filings', {}).get('recent', {})
+            recent_filings = submissions.get("filings", {}).get("recent", {})
             if not recent_filings:
                 return filings
 
             # Process recent filings
-            forms = recent_filings.get('form', [])
-            dates = recent_filings.get('filingDate', [])
-            accessions = recent_filings.get('accessionNumber', [])
-            report_dates = recent_filings.get('reportDate', [])
-            primary_docs = recent_filings.get('primaryDocument', [])
+            forms = recent_filings.get("form", [])
+            dates = recent_filings.get("filingDate", [])
+            accessions = recent_filings.get("accessionNumber", [])
+            report_dates = recent_filings.get("reportDate", [])
+            primary_docs = recent_filings.get("primaryDocument", [])
 
             for i in range(len(forms)):
                 form_type = forms[i]
                 if form_type not in form_types:
                     continue
 
-                filing_date = datetime.strptime(dates[i], '%Y-%m-%d')
+                filing_date = datetime.strptime(dates[i], "%Y-%m-%d")
 
                 # Apply date filters
                 if start_date and filing_date < start_date:
@@ -425,7 +426,7 @@ class EdgarClient:
 
                 report_date = None
                 if i < len(report_dates) and report_dates[i]:
-                    report_date = datetime.strptime(report_dates[i], '%Y-%m-%d')
+                    report_date = datetime.strptime(report_dates[i], "%Y-%m-%d")
 
                 primary_doc = primary_docs[i] if i < len(primary_docs) else None
 
@@ -436,14 +437,20 @@ class EdgarClient:
                     filing_date=filing_date,
                     report_date=report_date,
                     primary_document=primary_doc,
-                    ticker=submissions.get('tickers', [None])[0] if submissions.get('tickers') else None,
-                    company_name=submissions.get('name', '')
+                    ticker=(
+                        submissions.get("tickers", [None])[0]
+                        if submissions.get("tickers")
+                        else None
+                    ),
+                    company_name=submissions.get("name", ""),
                 )
 
                 # Build document URLs
                 accession_clean = filing.accession_clean
                 if accession_clean:
-                    filing.filing_url = f"{self.ARCHIVES_URL}/{filing.cik_padded}/{accession_clean}/"
+                    filing.filing_url = (
+                        f"{self.ARCHIVES_URL}/{filing.cik_padded}/{accession_clean}/"
+                    )
                 else:
                     filing.filing_url = f"{self.ARCHIVES_URL}/{filing.cik_padded}/"
 
@@ -478,21 +485,27 @@ class EdgarClient:
             # Attempt to fetch viewer-specific resources (contains ixviewer.zip)
             viewer_index_urls = [
                 f"{filing.base_edgar_url}/index.json?type=viewer",
-                f"{filing.base_edgar_url}/index.json?type=download"
+                f"{filing.base_edgar_url}/index.json?type=download",
             ]
             for viewer_url in viewer_index_urls:
                 try:
                     viewer_data = self._make_request(viewer_url).json()
                     docs = self._extract_documents_from_index(viewer_data, filing)
                     if docs:
-                        logger.debug(f"Found {len(docs)} viewer documents for {filing.accession_number}")
+                        logger.debug(
+                            f"Found {len(docs)} viewer documents for {filing.accession_number}"
+                        )
                     documents.update(docs)
                 except EdgarError:
                     continue
 
             if not documents and filing.primary_document:
-                logger.warning("No index JSON documents discovered; falling back to primary document only")
-                documents[filing.primary_document] = f"{filing.base_edgar_url}/{filing.primary_document}"
+                logger.warning(
+                    "No index JSON documents discovered; falling back to primary document only"
+                )
+                documents[filing.primary_document] = (
+                    f"{filing.base_edgar_url}/{filing.primary_document}"
+                )
 
             return documents
 
@@ -500,7 +513,9 @@ class EdgarClient:
             logger.error(f"Error getting filing documents: {e}")
             raise EdgarError(f"Failed to get filing documents: {e}")
 
-    def _extract_documents_from_index(self, index_data: Dict[str, Any], filing: Filing) -> Dict[str, str]:
+    def _extract_documents_from_index(
+        self, index_data: Dict[str, Any], filing: Filing
+    ) -> Dict[str, str]:
         """Extract file entries from an EDGAR index.json structure."""
 
         documents: Dict[str, str] = {}
@@ -508,35 +523,33 @@ class EdgarClient:
         if not index_data:
             return documents
 
-        directory = index_data.get('directory', {})
-        for item in directory.get('item', []):
-            item_type = (item.get('type') or '').lower()
-            if item_type == 'dir':
+        directory = index_data.get("directory", {})
+        for item in directory.get("item", []):
+            item_type = (item.get("type") or "").lower()
+            if item_type == "dir":
                 # Skip nested directories for now – viewer assets live at the root
                 continue
 
-            name = item.get('name') or ''
-            href = item.get('href') or name
+            name = item.get("name") or ""
+            href = item.get("href") or name
             lower_name = name.lower()
 
-            if not name or lower_name == 'index.json':
+            if not name or lower_name == "index.json":
                 continue
 
-            if href.endswith('/'):
+            if href.endswith("/"):
                 # Defensive check in case type metadata is missing but href points to a directory
                 continue
 
-            if lower_name.endswith(('.md5', '.idx', '.sig')):
+            if lower_name.endswith((".md5", ".idx", ".sig")):
                 continue
 
             # Capture common inline XBRL assets (viewer, submission packages, XML, HTML, JSON, ZIP)
-            if not lower_name.endswith((
-                '.htm', '.html', '.xml', '.json', '.zip', '.xsd', '.xbrl'
-            )) and lower_name not in {
-                'fullsubmission.txt', 'financial_report.xlsx'
-            }:
+            if not lower_name.endswith(
+                (".htm", ".html", ".xml", ".json", ".zip", ".xsd", ".xbrl")
+            ) and lower_name not in {"fullsubmission.txt", "financial_report.xlsx"}:
                 # Keep primary documents and ixviewer assets, skip md5/checksum files
-                if lower_name.endswith(('.txt', '.csv')):
+                if lower_name.endswith((".txt", ".csv")):
                     continue
 
             documents[name] = f"{filing.base_edgar_url}/{href}"
@@ -559,7 +572,7 @@ class EdgarClient:
         try:
             response = self._make_request(url, stream=True)
 
-            with open(local_path, 'wb') as f:
+            with open(local_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)

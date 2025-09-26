@@ -35,7 +35,11 @@ def test_end_to_end_presentation_parsing(integration_viewer_data):
     assert statement.periods
     assert len(statement.periods) in (1, 2)
     assert statement.rows
-    assert any(cell.raw_value is not None for row in statement.rows for cell in row.cells.values())
+    assert any(
+        cell.raw_value is not None
+        for row in statement.rows
+        for cell in row.cells.values()
+    )
 
 
 def test_reports_failure_when_presentation_missing(integration_viewer_data):
@@ -47,8 +51,12 @@ def test_reports_failure_when_presentation_missing(integration_viewer_data):
                     {
                         "roleDefs": {},
                         "rels": {},
-                        "facts": integration_viewer_data["sourceReports"][0]["targetReports"][0]["facts"],
-                        "concepts": integration_viewer_data["sourceReports"][0]["targetReports"][0]["concepts"],
+                        "facts": integration_viewer_data["sourceReports"][0][
+                            "targetReports"
+                        ][0]["facts"],
+                        "concepts": integration_viewer_data["sourceReports"][0][
+                            "targetReports"
+                        ][0]["concepts"],
                     }
                 ]
             }
@@ -73,7 +81,7 @@ def test_data_parser_filters_by_group_type():
         root_nodes=[],
         r_id="R3",
         group_type="statement",
-        role_order=1.0
+        role_order=1.0,
     )
 
     disclosure = PresentationStatement(
@@ -84,14 +92,16 @@ def test_data_parser_filters_by_group_type():
         root_nodes=[],
         r_id="R9",
         group_type="disclosure",
-        role_order=2.0
+        role_order=2.0,
     )
 
     filtered = parser._filter_presentation_statements([statement, disclosure])
     assert filtered == [statement]
 
     parser_with_disclosures = DataParser(include_disclosures=True)
-    filtered_inclusive = parser_with_disclosures._filter_presentation_statements([statement, disclosure])
+    filtered_inclusive = parser_with_disclosures._filter_presentation_statements(
+        [statement, disclosure]
+    )
     assert filtered_inclusive == [statement, disclosure]
 
 
@@ -111,27 +121,38 @@ def test_selected_periods_align_with_statement_type(integration_viewer_data):
             assert len(instants) == period_count
         elif "PARENTHE" in name_upper:
             assert period_count <= 2
-        elif any(keyword in name_upper for keyword in ["OPERATIONS", "COMPREHENSIVE", "CASH", "REDEEMABLE"]):
+        elif any(
+            keyword in name_upper
+            for keyword in ["OPERATIONS", "COMPREHENSIVE", "CASH", "REDEEMABLE"]
+        ):
             assert 1 <= period_count <= 3
-            assert instants != statement.periods  # expect durations present when available
+            assert (
+                instants != statement.periods
+            )  # expect durations present when available
 
 
 def test_label_style_standard_switch(integration_viewer_data):
-    terse_parser = DataParser(ValueFormatter(scale_millions=False), label_style='terse')
+    terse_parser = DataParser(ValueFormatter(scale_millions=False), label_style="terse")
     terse_result = terse_parser.parse_viewer_data(integration_viewer_data)
     terse_labels = {stmt.rows[1].label for stmt in terse_result.statements if stmt.rows}
 
-    standard_parser = DataParser(ValueFormatter(scale_millions=False), label_style='standard')
+    standard_parser = DataParser(
+        ValueFormatter(scale_millions=False), label_style="standard"
+    )
     standard_result = standard_parser.parse_viewer_data(integration_viewer_data)
-    standard_labels = {stmt.rows[1].label for stmt in standard_result.statements if stmt.rows}
+    standard_labels = {
+        stmt.rows[1].label for stmt in standard_result.statements if stmt.rows
+    }
 
     assert terse_result.success and standard_result.success
+    assert len(terse_labels) == len(standard_labels)
     # Some fixtures may not differentiate label roles; ensure toggle executes without error.
+
 
 def _first_raw_value(result, concept: str):
     for statement in result.statements:
         for row in statement.rows:
-            if getattr(row, 'concept', None) == concept:
+            if getattr(row, "concept", None) == concept:
                 for cell in row.cells.values():
                     if cell.raw_value is not None:
                         return cell.raw_value
@@ -139,15 +160,19 @@ def _first_raw_value(result, concept: str):
 
 
 def test_scale_hint_affects_raw_values(integration_viewer_data):
-    parser_scaled = DataParser(ValueFormatter(scale_millions=False), use_scale_hint=True)
+    parser_scaled = DataParser(
+        ValueFormatter(scale_millions=False), use_scale_hint=True
+    )
     result_scaled = parser_scaled.parse_viewer_data(integration_viewer_data)
 
-    parser_unscaled = DataParser(ValueFormatter(scale_millions=False), use_scale_hint=False)
+    parser_unscaled = DataParser(
+        ValueFormatter(scale_millions=False), use_scale_hint=False
+    )
     result_unscaled = parser_unscaled.parse_viewer_data(integration_viewer_data)
 
     assert result_scaled.success and result_unscaled.success
 
-    concept = 'us-gaap:CashAndCashEquivalentsAtCarryingValue'
+    concept = "us-gaap:CashAndCashEquivalentsAtCarryingValue"
     scaled_value = _first_raw_value(result_scaled, concept)
     unscaled_value = _first_raw_value(result_unscaled, concept)
 

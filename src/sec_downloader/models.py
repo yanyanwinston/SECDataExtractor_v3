@@ -11,6 +11,7 @@ from pathlib import Path
 @dataclass
 class Company:
     """Represents a company in the SEC database."""
+
     cik: str
     ticker: Optional[str] = None
     name: Optional[str] = None
@@ -35,6 +36,7 @@ class Company:
 @dataclass
 class Filing:
     """Represents a SEC filing."""
+
     cik: str
     accession_number: str
     form_type: str
@@ -60,31 +62,33 @@ class Filing:
             base_name = self.primary_document
 
             # Strip extension if present
-            if '.' in base_name:
-                base_name = base_name.rsplit('.', 1)[0]
+            if "." in base_name:
+                base_name = base_name.rsplit(".", 1)[0]
 
             # Remove trailing "-index" or similar suffixes
-            if base_name.lower().endswith('-index'):
+            if base_name.lower().endswith("-index"):
                 base_name = base_name[:-6]
 
-            if base_name.replace('-', '').isdigit():
+            if base_name.replace("-", "").isdigit():
                 self.accession_number = base_name
                 return self.accession_number
 
-        return self.accession_number or ''
+        return self.accession_number or ""
 
     @property
     def accession_clean(self) -> str:
         """Return accession number without dashes."""
         accession = self._ensure_accession_number()
-        return accession.replace('-', '') if accession else ''
+        return accession.replace("-", "") if accession else ""
 
     @property
     def base_edgar_url(self) -> str:
         """Return base EDGAR URL for this filing."""
         accession = self.accession_clean
         if accession:
-            return f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}/{accession}"
+            return (
+                f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}/{accession}"
+            )
         return f"https://www.sec.gov/Archives/edgar/data/{self.cik_padded}"
 
     @property
@@ -101,6 +105,7 @@ class Filing:
 @dataclass
 class DownloadConfig:
     """Configuration for filing downloads."""
+
     output_dir: Path
     create_subdirs: bool = True
     include_exhibits: bool = False
@@ -115,7 +120,11 @@ class DownloadConfig:
             return self.output_dir
 
         ticker = filing.ticker or f"CIK_{filing.cik}"
-        date_str = filing.report_date.strftime("%Y-%m-%d") if filing.report_date else filing.filing_date.strftime("%Y-%m-%d")
+        date_str = (
+            filing.report_date.strftime("%Y-%m-%d")
+            if filing.report_date
+            else filing.filing_date.strftime("%Y-%m-%d")
+        )
         filing_dir = self.output_dir / ticker / f"{filing.form_type}_{date_str}"
 
         return filing_dir
@@ -124,6 +133,7 @@ class DownloadConfig:
 @dataclass
 class DownloadResult:
     """Result of a filing download operation."""
+
     filing: Filing
     success: bool
     local_path: Optional[Path] = None
@@ -156,6 +166,7 @@ class DownloadResult:
 @dataclass
 class SearchFilters:
     """Filters for filing searches."""
+
     form_types: List[str] = field(default_factory=lambda: ["10-K", "10-Q"])
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
