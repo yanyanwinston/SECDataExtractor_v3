@@ -21,7 +21,8 @@ class DataParser:
     def __init__(
         self,
         formatter: Optional[ValueFormatter] = None,
-        include_disclosures: bool = False
+        include_disclosures: bool = False,
+        label_style: str = 'terse'
     ):
         """
         Initialize data parser.
@@ -31,7 +32,7 @@ class DataParser:
             include_disclosures: Whether to retain disclosure/detail roles in output
         """
         self.formatter = formatter or ValueFormatter()
-        self.presentation_parser = PresentationParser()
+        self.presentation_parser = PresentationParser(label_style=label_style)
         self.fact_matcher = FactMatcher(self.formatter)
         self.include_disclosures = include_disclosures
 

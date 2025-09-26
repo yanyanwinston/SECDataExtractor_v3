@@ -1012,6 +1012,7 @@ _Status:_ Core formatting assertions now live in `tests/test_excel_generator.py`
 
 * Drop the `--use-legacy` / `--use-presentation` switches entirely.
 * Treat parser failures as hard errors so the CLI mirrors the Excel generator's expectations.
+* New toggle surfaces MetaLinks options to the CLI (`--include-disclosures`, `--label-style standard|terse`, `--dump-role-map <csv>`).
 ### Step 6.2: Validation Plan
 
 1. **Regression sweep**: run the updated presentation pipeline against the existing fixture set and a handful of live filings.

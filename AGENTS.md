@@ -34,6 +34,6 @@
 
 - Phases 1–2 complete: viewer schema captured in `docs/11-refactor-spec-v3.1.md` and presentation models live in `src/processor/presentation_models.py`.
 - Phase 3 wrapped: `PresentationParser`, `FactMatcher`, and `DataParser` now run the presentation-first path end-to-end.
-- Phase 4 stabilized: `ExcelGenerator` consumes `presentation_node` metadata with styles wired via `openpyxl.styles`, row labels now default to `terseLabel`, and the CLI gained `--include-disclosures` / `--dump-role-map` toggles.
+- Phase 4 stabilized: `ExcelGenerator` consumes `presentation_node` metadata with styles wired via `openpyxl.styles`, row labels default to `terseLabel` (override with `--label-style standard`), and the CLI gained `--include-disclosures` / `--dump-role-map` toggles.
 - Phase 5 gaining coverage: parser/model specs sit under `tests/test_presentation_*.py`, integration tests assert sheet filtering + per-statement period heuristics, and `tests/test_excel_generator.py` checks workbook formatting; broader live-filing regression sweep still pending.
 - Phase 6 cutover done: `render_viewer_to_xlsx.py` only invokes the new pipeline; schedule a regression sweep + doc updates before tagging the release.

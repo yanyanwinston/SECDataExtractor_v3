@@ -125,6 +125,13 @@ Examples:
         help='Write MetaLinks role metadata to CSV for inspection'
     )
 
+    parser.add_argument(
+        '--label-style',
+        choices=['terse', 'standard'],
+        default='terse',
+        help='Preferred concept label style for Excel output (default: terse)'
+    )
+
     # Processing options
     parser.add_argument(
         '--verbose', '-v',
@@ -289,7 +296,8 @@ def process_filing(args) -> None:
         )
         data_parser = DataParser(
             formatter,
-            include_disclosures=args.include_disclosures
+            include_disclosures=args.include_disclosures,
+            label_style=args.label_style
         )
         result = data_parser.parse_viewer_data(viewer_data)
 

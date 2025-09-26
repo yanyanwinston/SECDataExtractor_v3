@@ -63,6 +63,10 @@ class ViewerDataExtractor:
                 if role_map:
                     json_data['role_map'] = role_map
 
+                concept_labels = self._build_concept_label_map(meta_links, html_file.name)
+                if concept_labels:
+                    json_data['concept_labels'] = concept_labels
+
             logger.info("Successfully extracted viewer JSON data")
             return json_data
 
@@ -213,6 +217,42 @@ class ViewerDataExtractor:
             'by_long_name': by_long_name,
             'by_normalized_name': by_normalized_name
         }
+
+    def _build_concept_label_map(self, meta_links: Dict[str, Any], instance_name: str) -> Optional[Dict[str, Dict[str, str]]]:
+        """Build concept label map keyed by concept QName."""
+        instance_data = meta_links.get('instance') or {}
+        instance_entry = instance_data.get(instance_name)
+        if not instance_entry and instance_data:
+            instance_entry = next(iter(instance_data.values()))
+
+        if not instance_entry:
+            return None
+
+        tag_block = instance_entry.get('tag')
+
+        if not isinstance(tag_block, dict):
+            return None
+
+        concept_labels: Dict[str, Dict[str, str]] = {}
+
+        for raw_name, payload in tag_block.items():
+            if not isinstance(payload, dict):
+                continue
+
+            concept_qname = raw_name.replace('_', ':', 1)
+            lang_info = payload.get('lang') or {}
+            role_entries: Dict[str, str] = {}
+
+            for lang_data in lang_info.values():
+                roles = lang_data.get('role') or {}
+                for role_name, role_value in roles.items():
+                    if isinstance(role_value, str) and role_value.strip():
+                        role_entries.setdefault(role_name, role_value)
+
+            if role_entries:
+                concept_labels[concept_qname] = role_entries
+
+        return concept_labels or None
 
     def _clean_json_string(self, json_str: str) -> str:
         """

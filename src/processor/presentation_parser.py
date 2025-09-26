@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 class PresentationParser:
     """Parse presentation relationships from viewer JSON data."""
 
+    def __init__(self, label_style: str = 'terse'):
+        """Create a presentation parser.
+
+        Args:
+            label_style: Preferred concept label style ("terse" or "standard").
+        """
+        self.label_style = label_style.lower()
+        if self.label_style == 'standard':
+            self.label_priority = ['label', 'std']
+        else:
+            self.label_priority = ['terseLabel', 'totalLabel', 'verboseLabel', 'label', 'std']
+        self.concept_label_map: Dict[str, Dict[str, str]] = {}
+
     def parse_presentation_statements(self, viewer_data: dict) -> List[PresentationStatement]:
         """Extract all financial statements from presentation linkbase.
 
@@ -31,6 +44,8 @@ class PresentationParser:
         """
         statements = []
 
+        concept_label_map = viewer_data.get('concept_labels', {})
+
         try:
             # Navigate to presentation relationships in viewer JSON structure
             target_report = viewer_data['sourceReports'][0]['targetReports'][0]
@@ -38,6 +53,7 @@ class PresentationParser:
             role_defs = target_report.get('roleDefs', {})
             concepts = target_report.get('concepts', {})
             role_metadata = viewer_data.get('role_map', {})
+            self.concept_label_map = concept_label_map or {}
 
             if not pres_rels:
                 logger.warning("No presentation relationships found in viewer data")
@@ -335,9 +351,18 @@ class PresentationParser:
             return self._humanize_concept_name(concept)
 
         # Try labels dictionary first so terse/total variants take precedence
+        labels_meta = {}
+        if hasattr(self, 'concept_label_map'):
+            labels_meta = self.concept_label_map.get(concept, {}) or {}
+
+        for label_type in self.label_priority:
+            if labels_meta and label_type in labels_meta:
+                value = labels_meta[label_type]
+                if isinstance(value, str) and value.strip():
+                    return value
+
         labels = concept_data.get('labels', {})
-        preferred_order = ['terseLabel', 'totalLabel', 'verboseLabel', 'label', 'std']
-        for label_type in preferred_order:
+        for label_type in self.label_priority:
             label_data = labels.get(label_type)
             if isinstance(label_data, dict):
                 for lang_key in ('en-us', 'en'):
@@ -368,6 +393,13 @@ class PresentationParser:
         Returns:
             Preferred label if available, None otherwise
         """
+        labels_meta = {}
+        if hasattr(self, 'concept_label_map'):
+            labels_meta = self.concept_label_map.get(concept, {}) or {}
+
+        if preferred_role in labels_meta:
+            return labels_meta[preferred_role]
+
         concept_data = concepts.get(concept, {})
         labels = concept_data.get('labels', {})
 

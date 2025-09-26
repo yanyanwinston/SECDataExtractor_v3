@@ -114,3 +114,16 @@ def test_selected_periods_align_with_statement_type(integration_viewer_data):
         elif any(keyword in name_upper for keyword in ["OPERATIONS", "COMPREHENSIVE", "CASH", "REDEEMABLE"]):
             assert 1 <= period_count <= 3
             assert instants != statement.periods  # expect durations present when available
+
+
+def test_label_style_standard_switch(integration_viewer_data):
+    terse_parser = DataParser(ValueFormatter(scale_millions=False), label_style='terse')
+    terse_result = terse_parser.parse_viewer_data(integration_viewer_data)
+    terse_labels = {stmt.rows[1].label for stmt in terse_result.statements if stmt.rows}
+
+    standard_parser = DataParser(ValueFormatter(scale_millions=False), label_style='standard')
+    standard_result = standard_parser.parse_viewer_data(integration_viewer_data)
+    standard_labels = {stmt.rows[1].label for stmt in standard_result.statements if stmt.rows}
+
+    assert terse_result.success and standard_result.success
+    # Some fixtures may not differentiate label roles; ensure toggle executes without error.

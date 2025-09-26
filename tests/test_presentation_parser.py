@@ -116,6 +116,10 @@ class TestPresentationParser:
         terse_label = self.parser._get_concept_label('custom:Example', custom_concepts)
         assert terse_label == 'Terse Example'
 
+        standard_parser = PresentationParser(label_style='standard')
+        standard_label = standard_parser._get_concept_label('custom:Example', custom_concepts)
+        assert standard_label == 'Standard Example'
+
         # Test concept not in definitions (should get humanized name)
         missing_concept = "us-gaap:MissingConceptExample"
         label = self.parser._get_concept_label(missing_concept, concepts)
