@@ -53,7 +53,9 @@ class ArelleProcessor:
         filing_path_resolved = filing_path_path.resolve()
 
         # Create output directory
-        output_dir = self.temp_dir / f"arelle_output_{hash(str(filing_path_resolved)) % 10000}"
+        output_dir = (
+            self.temp_dir / f"arelle_output_{hash(str(filing_path_resolved)) % 10000}"
+        )
         output_dir.mkdir(exist_ok=True)
 
         viewer_file = output_dir / "ixbrl-viewer.htm"
