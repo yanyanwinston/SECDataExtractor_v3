@@ -173,6 +173,10 @@ class DataParser:
             viewer_data
         )
 
+        self.fact_matcher.update_concept_labels(
+            self.presentation_parser.concept_label_map
+        )
+
         presentation_statements = self._filter_presentation_statements(presentation_statements)
 
         if not presentation_statements:

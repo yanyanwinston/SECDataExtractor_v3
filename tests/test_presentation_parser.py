@@ -398,6 +398,190 @@ class TestFactMatcher:
         assets_row = next(row for row in table_result.rows if row.label == 'Total assets')
         assert assets_row.depth == 1  # Indented beneath the abstract root only
 
+    def test_dimension_rows_expanded(self):
+        """Dimensioned facts should materialize as additional child rows."""
+        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+
+        revenue_node = PresentationNode(
+            concept='us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+            label='Revenue',
+            order=5,
+            depth=2,
+            abstract=False,
+        )
+
+        line_items = PresentationNode(
+            concept='us-gaap:StatementLineItems',
+            label='Statement [Line Items]',
+            order=1,
+            depth=1,
+            abstract=False,
+            children=[revenue_node],
+        )
+
+        automotive_member = PresentationNode(
+            concept='ns0:AutomotiveSalesMember',
+            label='Automotive Sales [Member]',
+            order=0,
+            depth=3,
+            abstract=False,
+        )
+
+        energy_member = PresentationNode(
+            concept='ns0:EnergyGenerationAndStorageMember',
+            label='Energy Generation and Storage [Member]',
+            order=1,
+            depth=3,
+            abstract=False,
+        )
+
+        product_domain = PresentationNode(
+            concept='srt:ProductsAndServicesDomain',
+            label='Product and Service [Domain]',
+            order=0,
+            depth=2,
+            abstract=False,
+            children=[automotive_member, energy_member],
+        )
+
+        product_axis = PresentationNode(
+            concept='srt:ProductOrServiceAxis',
+            label='Product and Service [Axis]',
+            order=0,
+            depth=1,
+            abstract=False,
+            children=[product_domain],
+        )
+
+        table_node = PresentationNode(
+            concept='us-gaap:StatementTable',
+            label='Statement [Table]',
+            order=0,
+            depth=0,
+            abstract=False,
+            children=[product_axis, line_items],
+        )
+
+        root = PresentationNode(
+            concept='us-gaap:IncomeStatementAbstract',
+            label='Income Statement [Abstract]',
+            order=0,
+            depth=0,
+            abstract=True,
+            children=[table_node],
+        )
+
+        statement = PresentationStatement(
+            role_uri='uri',
+            role_id='ns20',
+            statement_name='Consolidated Statements of Operations',
+            statement_type=StatementType.INCOME_STATEMENT,
+            root_nodes=[root],
+        )
+
+        periods = [
+            Period(label='FY24', end_date='2024-12-31', instant=False),
+            Period(label='FY23', end_date='2023-12-31', instant=False),
+        ]
+
+        facts = {
+            'f-total-2024': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2024-01-01/2024-12-31',
+                    'u': 'iso4217:USD',
+                },
+                'v': 1000.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+            'f-total-2023': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2023-01-01/2023-12-31',
+                    'u': 'iso4217:USD',
+                },
+                'v': 900.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+            'f-auto-2024': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2024-01-01/2024-12-31',
+                    'u': 'iso4217:USD',
+                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+                },
+                'v': 600.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+            'f-auto-2023': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2023-01-01/2023-12-31',
+                    'u': 'iso4217:USD',
+                    'srt:ProductOrServiceAxis': 'ns0:AutomotiveSalesMember',
+                },
+                'v': 500.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+            'f-energy-2024': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2024-01-01/2024-12-31',
+                    'u': 'iso4217:USD',
+                    'srt:ProductOrServiceAxis': 'ns0:EnergyGenerationAndStorageMember',
+                },
+                'v': 400.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+            'f-energy-2023': {
+                'a': {
+                    'c': 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+                    'p': '2023-01-01/2023-12-31',
+                    'u': 'iso4217:USD',
+                    'srt:ProductOrServiceAxis': 'ns0:EnergyGenerationAndStorageMember',
+                },
+                'v': 400.0,
+                'd': 0,
+                'u': 'iso4217:USD',
+            },
+        }
+
+        axis_metadata = self.fact_matcher._extract_axis_metadata(statement)
+        grouped = self.fact_matcher._group_facts_by_dimensions(
+            'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax',
+            facts,
+            axis_metadata,
+            {}
+        )
+        assert any(dim_key for dim_key in grouped.keys())  # ensure dimensional groups present
+
+        table_result = self.fact_matcher.match_facts_to_statement(statement, facts, periods)
+
+        revenue_rows = [
+            row for row in table_result.rows
+            if row.concept == 'us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax'
+        ]
+
+        assert [row.label for row in revenue_rows] == [
+            'Revenue',
+            'Automotive Sales',
+            'Energy Generation and Storage',
+        ]
+
+        revenue_row, auto_row, energy_row = revenue_rows
+
+        assert revenue_row.cells['FY24'].raw_value == 1000.0
+        assert revenue_row.cells['FY23'].raw_value == 900.0
+        assert auto_row.cells['FY24'].raw_value == 600.0
+        assert auto_row.cells['FY23'].raw_value == 500.0
+        assert energy_row.cells['FY24'].raw_value == 400.0
+        assert energy_row.cells['FY23'].raw_value == 400.0
+
     def test_format_period_label(self):
         """Test period label formatting."""
         test_cases = [

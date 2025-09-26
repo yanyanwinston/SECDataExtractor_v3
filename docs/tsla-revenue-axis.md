@@ -40,6 +40,6 @@
 3. How should indentation and labeling work when multiple axes apply (e.g., product vs geography)?
 
 ## Next Steps
-1. Prototype a matcher enhancement that, when a line item has dimensional facts, expands rows per member beneath the parent `Revenues` section.
-2. Gate the expansion behind configuration so balance sheets remain concise while income statements can opt into dimensional detail.
-3. Add regression coverage using the TSLA viewer sample to assert the automotive sales/regulatory/leasing rows appear with the correct values.
+1. ✅ `FactMatcher` now groups line-item facts by the axes present in the statement, emits one row per member (indented beneath the parent), and labels them using the MetaLinks member names.
+2. ❑ Review whether we need configuration switches to limit expansion (e.g., keep equity component rows, but maybe skip low-signal axes on disclosures).
+3. ✅ Unit test coverage (`test_dimension_rows_expanded`) asserts the breakout rows are generated with the correct fact values; rerunning the TSLA workbook now shows automotive sales / regulatory credits / leasing plus equivalent cost-of-revenue splits.

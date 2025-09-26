@@ -7,7 +7,7 @@ nodes, creating complete statement tables ready for Excel generation.
 
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .presentation_models import (
     PresentationNode,
@@ -31,6 +31,11 @@ class FactMatcher:
         """
         self.formatter = formatter
         self.use_scale_hint = use_scale_hint
+        self.concept_labels: Dict[str, Dict[str, str]] = {}
+
+    def update_concept_labels(self, labels: Optional[Dict[str, Dict[str, str]]]) -> None:
+        """Refresh the concept label map supplied by the presentation parser."""
+        self.concept_labels = labels or {}
 
     def match_facts_to_statement(self, statement: PresentationStatement,
                                 facts: dict, periods: List[Period]) -> StatementTable:
@@ -46,15 +51,18 @@ class FactMatcher:
         """
         logger.debug(f"Matching facts for statement: {statement.statement_name}")
 
-        rows = []
+        rows: List[StatementRow] = []
 
         # Track display depth per structural level so we can collapse axis/table/domain nodes
         display_depth_by_level: Dict[int, int] = {}
 
+        axis_metadata = self._extract_axis_metadata(statement)
+        concept_context_cache: Dict[str, List[dict]] = {}
+
         # Flatten presentation tree to get all rows in presentation order
         for node, depth in statement.get_all_nodes_flat():
-            # Remove deeper levels when walking back up the tree
-            for level in list(display_depth_by_level.keys()):
+            # Remove deeper levels when walking back up the tree while keeping parent depth metadata
+            for level in sorted(list(display_depth_by_level.keys()), reverse=True):
                 if level >= depth:
                     del display_depth_by_level[level]
 
@@ -66,32 +74,18 @@ class FactMatcher:
                 continue
 
             display_depth = max(parent_display_depth + 1, 0)
-            node.depth = display_depth
             display_depth_by_level[depth] = display_depth
 
-            # Find facts for this concept across all periods
-            cells = {}
+            generated_rows = self._generate_rows_for_node(
+                node,
+                display_depth,
+                periods,
+                facts,
+                axis_metadata,
+                concept_context_cache
+            )
 
-            for period in periods:
-                fact = self._find_fact_for_concept_and_period(
-                    node.concept, period, facts
-                )
-
-                if fact:
-                    cell = self._create_cell_from_fact(fact, period)
-                else:
-                    # Create empty cell for missing data
-                    cell = Cell(
-                        value="—",
-                        raw_value=None,
-                        unit=None,
-                        decimals=None,
-                        period=period.label
-                    )
-
-                cells[period.label] = cell
-
-            rows.append(StatementRow(node=node, cells=cells))
+            rows.extend(generated_rows)
 
         logger.debug(f"Created {len(rows)} rows for statement")
 
@@ -100,6 +94,308 @@ class FactMatcher:
             periods=periods,
             rows=rows
         )
+
+    def _generate_rows_for_node(
+        self,
+        node: PresentationNode,
+        display_depth: int,
+        periods: List[Period],
+        facts: dict,
+        axis_metadata: Dict[str, Dict[str, str]],
+        concept_context_cache: Dict[str, List[dict]],
+    ) -> List[StatementRow]:
+        """Create one or more rows for a presentation node, expanding by dimensions."""
+
+        concept = node.concept or ''
+
+        if not concept:
+            clone = self._clone_node(node, depth=display_depth)
+            return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+
+        fact_groups = self._group_facts_by_dimensions(
+            concept,
+            facts,
+            axis_metadata,
+            concept_context_cache,
+        )
+
+        if not fact_groups:
+            clone = self._clone_node(node, depth=display_depth)
+            return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+
+        # Sort: base row (no dimensions) first, then remaining dimension combinations.
+        sorted_keys = sorted(
+            fact_groups.keys(),
+            key=lambda key: (len(key), [axis for axis, _ in key], [member for _, member in key])
+        )
+
+        generated_rows: List[StatementRow] = []
+
+        for dims_key in sorted_keys:
+            group = fact_groups[dims_key]
+            dims_map = dict(dims_key)
+
+            if not dims_map:
+                row_label = node.label
+                row_depth = display_depth
+                abstract = node.abstract
+            else:
+                row_label = self._format_dimension_label(
+                    dims_map,
+                    axis_metadata,
+                    node.label
+                )
+                row_depth = display_depth + 1
+                abstract = False
+
+            clone = self._clone_node(
+                node,
+                label=row_label,
+                depth=row_depth,
+                abstract=abstract,
+            )
+
+            cells = self._build_cells_for_group(group['contexts'], periods)
+
+            # Skip rows where every cell is blank.
+            if all(cell.raw_value is None for cell in cells.values()):
+                continue
+
+            generated_rows.append(StatementRow(node=clone, cells=cells))
+
+        return generated_rows or [
+            StatementRow(
+                node=self._clone_node(node, depth=display_depth),
+                cells=self._build_empty_cells(periods)
+            )
+        ]
+
+    def _group_facts_by_dimensions(
+        self,
+        concept: str,
+        facts: dict,
+        axis_metadata: Dict[str, Dict[str, str]],
+        concept_context_cache: Dict[str, List[dict]],
+    ) -> Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]]:
+        """Group fact contexts by their dimensional fingerprints."""
+
+        contexts = concept_context_cache.get(concept)
+        if contexts is None:
+            contexts = self._extract_fact_contexts(concept, facts)
+            concept_context_cache[concept] = contexts
+
+        groups: Dict[Tuple[Tuple[str, str], ...], Dict[str, Any]] = {}
+
+        for context in contexts:
+            dims = context.get('dims', {}) or {}
+            filtered_dims = {
+                axis: member
+                for axis, member in dims.items()
+                if axis in axis_metadata
+            }
+            dim_key = tuple(sorted(filtered_dims.items()))
+            group = groups.setdefault(dim_key, {'dims': filtered_dims, 'contexts': []})
+            group['contexts'].append(context)
+
+        return groups
+
+    def _extract_fact_contexts(self, concept: str, facts: dict) -> List[dict]:
+        """Extract all contexts for a concept, including dimensional metadata."""
+
+        contexts: List[dict] = []
+
+        for fact_id, fact_data in facts.items():
+            for context_key, context_data in fact_data.items():
+                if not isinstance(context_data, dict):
+                    continue
+
+                if context_data.get('c') != concept:
+                    continue
+
+                record = dict(context_data)
+                record['fact_id'] = fact_id
+
+                for key in ('v', 'value', 'd', 'u', 'unit'):
+                    if key in fact_data and key not in record:
+                        record[key] = fact_data[key]
+
+                record['dims'] = self._extract_dimensions_from_context(context_data)
+                contexts.append(record)
+
+        return contexts
+
+    def _extract_dimensions_from_context(self, context: dict) -> Dict[str, str]:
+        """Return axis -> member mapping from a context entry."""
+
+        dims: Dict[str, str] = {}
+
+        for container_key in ('dims', 'dimValues'):
+            container = context.get(container_key)
+            if isinstance(container, dict):
+                dims.update({k: v for k, v in container.items() if isinstance(v, str)})
+
+        skip_keys = {
+            'c', 'p', 'u', 'unit', 'e', 'entity', 'm',
+            'fact_id', 'v', 'value', 'd', 'dims', 'dimValues'
+        }
+
+        for key, value in context.items():
+            if key in skip_keys:
+                continue
+            if isinstance(value, str):
+                dims[key] = value
+
+        return dims
+
+    def _build_cells_for_group(
+        self,
+        contexts: Iterable[dict],
+        periods: List[Period],
+    ) -> Dict[str, Cell]:
+        """Create cells for each period using the provided fact contexts."""
+
+        context_list = list(contexts)
+        cells: Dict[str, Cell] = {}
+
+        for period in periods:
+            context = self._select_context_for_period(context_list, period)
+            if context:
+                cell = self._create_cell_from_fact(context, period)
+            else:
+                cell = Cell(
+                    value="—",
+                    raw_value=None,
+                    unit=None,
+                    decimals=None,
+                    period=period.label,
+                )
+            cells[period.label] = cell
+
+        return cells
+
+    def _select_context_for_period(
+        self,
+        contexts: Iterable[dict],
+        period: Period,
+    ) -> Optional[dict]:
+        """Return the first context in the iterable matching the period."""
+
+        for context in contexts:
+            if self._period_matches(period, context.get('p')):
+                return context
+        return None
+
+    def _build_empty_cells(self, periods: List[Period]) -> Dict[str, Cell]:
+        """Generate empty cells for the supplied periods."""
+
+        return {
+            period.label: Cell(
+                value="—",
+                raw_value=None,
+                unit=None,
+                decimals=None,
+                period=period.label,
+            )
+            for period in periods
+        }
+
+    @staticmethod
+    def _clone_node(
+        node: PresentationNode,
+        *,
+        label: Optional[str] = None,
+        depth: Optional[int] = None,
+        abstract: Optional[bool] = None,
+    ) -> PresentationNode:
+        """Create a lightweight clone of a presentation node for row materialisation."""
+
+        return PresentationNode(
+            concept=node.concept,
+            label=label if label is not None else node.label,
+            order=node.order,
+            depth=depth if depth is not None else node.depth,
+            abstract=abstract if abstract is not None else node.abstract,
+            preferred_label_role=node.preferred_label_role,
+            children=[],
+        )
+
+    def _format_dimension_label(
+        self,
+        dims: Dict[str, str],
+        axis_metadata: Dict[str, Dict[str, str]],
+        fallback: str,
+    ) -> str:
+        """Derive a display label for a dimensional breakdown row."""
+
+        if not dims:
+            return fallback
+
+        labels: List[str] = []
+
+        for axis, member in dims.items():
+            member_label = axis_metadata.get(axis, {}).get(member)
+            if not member_label:
+                member_label = self._label_for_concept(member)
+            if not member_label:
+                member_label = member.split(':', 1)[-1]
+            labels.append(self._clean_member_label(member_label))
+
+        if not labels:
+            return fallback
+        if len(labels) == 1:
+            return labels[0]
+
+        return ' / '.join(labels)
+
+    def _label_for_concept(self, concept: str) -> Optional[str]:
+        """Look up a preferred label for the supplied concept."""
+
+        entries = self.concept_labels.get(concept) or {}
+        for key in (
+            'terseLabel',
+            'label',
+            'std',
+            'en-us',
+            'en',
+        ):
+            if key in entries and entries[key]:
+                return entries[key]
+        return None
+
+    @staticmethod
+    def _clean_member_label(label: str) -> str:
+        """Remove trailing member suffixes for cleaner display."""
+
+        cleaned = (label or '').strip()
+        if cleaned.endswith('[Member]'):
+            cleaned = cleaned[:-len('[Member]')].strip()
+        return cleaned
+
+    def _extract_axis_metadata(
+        self,
+        statement: PresentationStatement,
+    ) -> Dict[str, Dict[str, str]]:
+        """Collect axis/member label mappings for the statement."""
+
+        metadata: Dict[str, Dict[str, str]] = {}
+
+        def traverse(node: PresentationNode, active_axis: Optional[str] = None) -> None:
+            concept = node.concept or ''
+            local_name = concept.split(':', 1)[-1]
+
+            if local_name.endswith('Axis'):
+                active_axis = concept
+                metadata.setdefault(concept, {})
+            elif local_name.endswith('Member') and active_axis:
+                metadata.setdefault(active_axis, {})[concept] = node.label
+
+            for child in node.children:
+                traverse(child, active_axis)
+
+        for root in statement.root_nodes:
+            traverse(root, None)
+
+        return metadata
 
     @staticmethod
     def _is_structural_node(node: PresentationNode) -> bool:
