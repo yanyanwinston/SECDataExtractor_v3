@@ -73,7 +73,6 @@ class EdgarClient:
         self.session.headers.update({
             'User-Agent': self.user_agent,
             'Accept-Encoding': 'gzip, deflate',
-            'Host': 'www.sec.gov',
         })
 
         logger.info(f"Initialized EDGAR client with User-Agent: {self.user_agent}")
