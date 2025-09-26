@@ -7,6 +7,7 @@ import logging
 import asyncio
 import aiohttp
 import aiofiles
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -313,6 +314,10 @@ class FilingDownload:
         # Cover pages/graphics frequently ship as separate attachments we do not need
         graphic_suffixes = ('.jpg', '.jpeg', '.png', '.gif', '.svg', '.tif', '.tiff')
         if filename_lower.endswith(graphic_suffixes):
+            return True
+
+        # Presentation fragment pattern (R##.htm) – skip when exhibits are disabled
+        if re.fullmatch(r'r\d+\.htm(l)?', filename_lower):
             return True
 
         if 'cover' in filename_lower and filename_lower.endswith('.htm'):

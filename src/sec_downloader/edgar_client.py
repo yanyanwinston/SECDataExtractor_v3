@@ -12,7 +12,7 @@ import json
 import logging
 import requests
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Sequence
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -52,6 +52,8 @@ class EdgarClient:
         """
         self.user_agent = user_agent or get_user_agent()
         self.rate_limiter = RateLimiter(max_requests=requests_per_second)
+        self._ticker_cache: Dict[str, Company] = {}
+        self._ticker_index_loaded = False
 
         # Configure requests session with retries
         self.session = requests.Session()
@@ -76,7 +78,12 @@ class EdgarClient:
 
         logger.info(f"Initialized EDGAR client with User-Agent: {self.user_agent}")
 
-    def _make_request(self, url: str, **kwargs) -> requests.Response:
+    def _make_request(
+        self,
+        url: str,
+        allowed_status: Optional[Sequence[int]] = None,
+        **kwargs
+    ) -> requests.Response:
         """
         Make rate-limited HTTP request.
 
@@ -95,12 +102,93 @@ class EdgarClient:
         try:
             logger.debug(f"Making request to: {url}")
             response = self.session.get(url, timeout=30, **kwargs)
+
+            if allowed_status and response.status_code in allowed_status:
+                return response
+
             response.raise_for_status()
             return response
 
         except requests.RequestException as e:
             logger.error(f"Request failed for {url}: {e}")
             raise EdgarError(f"Failed to fetch {url}: {e}")
+
+    def _ensure_ticker_index(self) -> None:
+        """Load the SEC ticker index once and cache the results."""
+
+        if self._ticker_index_loaded:
+            return
+
+        urls = [
+            f"{self.BASE_URL}/files/company_tickers.json",
+            f"{self.DATA_URL}/company_tickers.json",
+            f"{self.BASE_URL}/Archives/edgar/cik-lookup-data.txt",
+        ]
+
+        last_error: Optional[Exception] = None
+
+        for url in urls:
+            try:
+                response = self._make_request(url)
+
+                if url.endswith('.json'):
+                    try:
+                        data = response.json()
+                    except json.JSONDecodeError as exc:
+                        last_error = exc
+                        continue
+
+                    entries = data.values() if isinstance(data, dict) else data
+                    for entry in entries:
+                        ticker_value = (entry.get('ticker') or '').upper().strip()
+                        if not ticker_value:
+                            continue
+
+                        cik_value = str(entry.get('cik_str') or entry.get('cik') or '').strip()
+                        if not cik_value:
+                            continue
+
+                        company = Company(
+                            cik=cik_value.zfill(10),
+                            ticker=ticker_value,
+                            name=entry.get('title'),
+                            exchange=entry.get('exchange')
+                        )
+                        self._ticker_cache[ticker_value] = company
+
+                    self._ticker_index_loaded = True
+                    return
+
+                # Fallback plain-text format (pipe-delimited)
+                text = response.text
+                for line in text.splitlines():
+                    parts = [part.strip() for part in line.split('|')]
+                    if len(parts) < 3:
+                        continue
+                    cik_value, ticker_value, name_value = parts[:3]
+                    if not ticker_value:
+                        continue
+
+                    ticker_upper = ticker_value.upper()
+                    company = Company(
+                        cik=cik_value.zfill(10),
+                        ticker=ticker_upper,
+                        name=name_value
+                    )
+                    self._ticker_cache[ticker_upper] = company
+
+                if self._ticker_cache:
+                    self._ticker_index_loaded = True
+                    return
+
+            except EdgarError as err:
+                last_error = err
+                continue
+
+        if not self._ticker_index_loaded:
+            if last_error:
+                raise EdgarError(str(last_error))
+            raise EdgarError("Could not access any company tickers endpoint")
 
     def lookup_company_by_ticker(self, ticker: str) -> Optional[Company]:
         """
@@ -115,46 +203,24 @@ class EdgarClient:
         ticker = normalize_ticker(ticker)
         logger.info(f"Looking up company by ticker: {ticker}")
 
+        cached = self._ticker_cache.get(ticker)
+        if cached:
+            logger.debug(f"Using cached company lookup for {ticker}")
+            return cached
+
         try:
-            # Try multiple possible endpoints for company tickers
-            urls = [
-                f"{self.BASE_URL}/files/company_tickers.json",
-                f"{self.DATA_URL}/company_tickers.json",
-                f"{self.BASE_URL}/Archives/edgar/cik-lookup-data.txt"
-            ]
-
-            response = None
-            for url in urls:
-                try:
-                    response = self._make_request(url)
-                    break
-                except EdgarError:
-                    continue
-
-            if response is None:
-                raise EdgarError("Could not access any company tickers endpoint")
-
-            tickers_data = response.json()
-
-            # Search for the ticker
-            for entry in tickers_data.values():
-                if entry.get('ticker', '').upper() == ticker:
-                    cik = str(entry['cik_str']).zfill(10)
-                    company = Company(
-                        cik=cik,
-                        ticker=ticker,
-                        name=entry.get('title', ''),
-                        exchange=entry.get('exchange', '')
-                    )
-                    logger.info(f"Found company: {company}")
-                    return company
-
-            logger.warning(f"No company found for ticker: {ticker}")
-            return None
-
-        except Exception as e:
+            self._ensure_ticker_index()
+        except EdgarError as e:
             logger.error(f"Error looking up ticker {ticker}: {e}")
             raise EdgarError(f"Failed to lookup ticker {ticker}: {e}")
+
+        company = self._ticker_cache.get(ticker)
+        if company:
+            logger.info(f"Found company: {company}")
+            return company
+
+        logger.warning(f"No company found for ticker: {ticker}")
+        return None
 
     def lookup_company_by_cik(self, cik: str) -> Optional[Company]:
         """
@@ -202,41 +268,43 @@ class EdgarClient:
             raise EdgarError(f"Failed to lookup CIK {cik}: {e}")
 
     def get_company_submissions(self, cik: str) -> Dict[str, Any]:
-        """
-        Get all submissions for a company.
+        """Get submission metadata for a company via the structured submissions API."""
 
-        Args:
-            cik: Central Index Key
-
-        Returns:
-            Submissions data dictionary
-        """
         cik = normalize_cik(cik)
         logger.info(f"Getting submissions for CIK: {cik}")
 
-        try:
-            # Use the ATOM feed which is more stable
-            atom_url = f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=10-K&dateb=&owner=exclude&count=40&output=atom"
-            response = self._make_request(atom_url)
-            return self._parse_atom_feed(response.text, cik)
+        submissions_url = f"{self.DATA_URL}/submissions/CIK{cik}.json"
 
+        try:
+            response = self._make_request(submissions_url, allowed_status=(404,))
+            if response.status_code == 404:
+                logger.warning(
+                    "Submissions endpoint returned 404 for CIK %s; falling back to legacy feed",
+                    cik
+                )
+                return self._get_company_submissions_atom(cik)
+            return response.json()
         except Exception as e:
             logger.error(f"Error getting submissions for CIK {cik}: {e}")
             raise EdgarError(f"Failed to get submissions for CIK {cik}: {e}")
 
-    def _parse_atom_feed(self, atom_text: str, cik: str) -> Dict[str, Any]:
-        """Parse ATOM feed format into submissions structure."""
+    def _get_company_submissions_atom(self, cik: str) -> Dict[str, Any]:
+        """Fallback to the legacy ATOM feed when the submissions API is unavailable."""
+
         import xml.etree.ElementTree as ET
 
+        atom_url = (
+            f"{self.BASE_URL}/cgi-bin/browse-edgar?action=getcompany&CIK={cik}"
+            "&type=&dateb=&owner=exclude&count=100&output=atom"
+        )
+
         try:
-            # Debug: log the ATOM feed content
-            logger.debug(f"ATOM feed content: {atom_text[:1000]}...")
-
+            response = self._make_request(atom_url)
+            atom_text = response.text
             root = ET.fromstring(atom_text)
-
-            # Extract entries from ATOM feed
-            filings = []
             ns = '{http://www.w3.org/2005/Atom}'
+
+            filings: List[Dict[str, Any]] = []
 
             for entry in root.findall(f'.//{ns}entry'):
                 title_elem = entry.find(f'.//{ns}title')
@@ -246,15 +314,13 @@ class EdgarClient:
                 if title_elem is None or link_elem is None:
                     continue
 
-                title = title_elem.text or ""
+                title = title_elem.text or ''
                 href = link_elem.get('href', '')
-
-                # Extract filing date and accession number from title or link
-                filing_date = ""
+                filing_date = ''
                 if updated_elem is not None and updated_elem.text:
                     filing_date = updated_elem.text.split('T')[0]
 
-                accession = ""
+                accession = ''
                 if '/Archives/edgar/data/' in href:
                     parts = href.split('/')
                     for part in parts:
@@ -262,20 +328,16 @@ class EdgarClient:
                             accession = part
                             break
 
-                # Determine form type from category metadata when available
-                form = ""
+                form = ''
                 for category in entry.findall(f'.//{ns}category'):
                     term = (category.get('term') or '').strip()
                     label = (category.get('label') or '').lower()
                     if not term:
                         continue
-
                     if label and 'form' not in label:
                         continue
-
                     form = term.upper()
-                    # Prefer the first explicit amendment match
-                    if form.endswith('/A'):
+                    if form:
                         break
 
                 if not form:
@@ -285,35 +347,30 @@ class EdgarClient:
                             form = candidate
                             break
 
-                if not form:
-                    # Fallback to unknown form so downstream filters can ignore it
-                    form = 'UNKNOWN'
+                primary_doc = href.split('/')[-1] if href else ''
 
                 filings.append({
                     'accessionNumber': accession,
                     'filingDate': filing_date,
                     'form': form,
-                    'primaryDocument': href.split('/')[-1] if href else "",
-                    'primaryDocDescription': title
+                    'primaryDocument': primary_doc,
                 })
 
-            # Return in the format expected by the rest of the code
             return {
                 'cik': cik,
                 'filings': {
                     'recent': {
-                        'accessionNumber': [f.get('accessionNumber', '') for f in filings],
-                        'filingDate': [f.get('filingDate', '') for f in filings],
-                        'form': [f.get('form', '') for f in filings],
-                        'primaryDocument': [f.get('primaryDocument', '') for f in filings],
-                        'primaryDocDescription': [f.get('primaryDocDescription', '') for f in filings]
+                        'accessionNumber': [f['accessionNumber'] for f in filings],
+                        'filingDate': [f['filingDate'] for f in filings],
+                        'form': [f['form'] for f in filings],
+                        'primaryDocument': [f['primaryDocument'] for f in filings],
                     }
                 }
             }
 
         except Exception as e:
-            logger.error(f"Error parsing ATOM feed: {e}")
-            raise EdgarError(f"Failed to parse ATOM feed for CIK {cik}: {e}")
+            logger.error(f"Failed to fetch ATOM submissions for CIK {cik}: {e}")
+            raise EdgarError(f"Failed to fetch submissions for CIK {cik}: {e}")
 
     def search_filings(
         self,

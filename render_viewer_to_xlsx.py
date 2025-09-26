@@ -297,9 +297,22 @@ def process_filing(args) -> None:
 
         filing_path = filing_source.get_path()
         meta_links_candidates = []
+
+        # Include explicit candidates provided by the caller (e.g., original download directory)
+        extra_meta_links = getattr(args, 'meta_links_candidates', None)
+        if extra_meta_links:
+            for candidate in extra_meta_links:
+                candidate_path = Path(candidate)
+                if candidate_path.exists():
+                    meta_links_candidates.append(candidate_path)
+
         original_meta_links = Path(filing_path).with_name('MetaLinks.json')
         if original_meta_links.exists():
             meta_links_candidates.append(original_meta_links)
+
+        legacy_meta_links = Path(filing_path).with_name('metalink.json')
+        if legacy_meta_links.exists():
+            meta_links_candidates.append(legacy_meta_links)
 
         if not input_handler.validate_filing(filing_path):
             logger.warning("File does not appear to be a valid iXBRL filing")

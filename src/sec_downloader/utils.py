@@ -5,8 +5,9 @@ Utility functions for SEC filing downloader.
 import re
 import time
 from datetime import datetime
-from typing import Optional
 from pathlib import Path
+from threading import Lock
+from typing import Optional
 
 
 def normalize_cik(cik: str) -> str:
@@ -158,23 +159,25 @@ class RateLimiter:
         self.max_requests = max_requests
         self.time_window = time_window
         self.requests = []
+        self._lock = Lock()
 
     def wait_if_needed(self) -> None:
         """
         Wait if rate limit would be exceeded.
         """
-        now = time.time()
+        with self._lock:
+            now = time.time()
 
-        # Remove old requests outside the time window
-        self.requests = [req_time for req_time in self.requests if now - req_time < self.time_window]
+            # Remove old requests outside the time window
+            self.requests = [req_time for req_time in self.requests if now - req_time < self.time_window]
 
-        # If we would exceed the limit, wait
-        if len(self.requests) >= self.max_requests:
-            sleep_time = self.time_window - (now - self.requests[0]) + 0.1  # Small buffer
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-                now = time.time()
-                self.requests = [req_time for req_time in self.requests if now - req_time < self.time_window]
+            if len(self.requests) >= self.max_requests:
+                sleep_time = self.time_window - (now - self.requests[0]) + 0.1
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                    now = time.time()
+                    self.requests = [
+                        req_time for req_time in self.requests if now - req_time < self.time_window
+                    ]
 
-        # Record this request
-        self.requests.append(now)
+            self.requests.append(now)
