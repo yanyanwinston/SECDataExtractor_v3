@@ -231,7 +231,16 @@ python render_viewer_to_xlsx.py \
   --out custom-format.xlsx \
   --periods "2023,2022" \
   --currency USD \
+  --label-style standard \
+  --save-viewer-json output/custom-viewer.json \
   --one-period
+
+# Need raw decimals for debugging?
+python render_viewer_to_xlsx.py \
+  --filing downloaded-filing.htm \
+  --out custom-format-raw.xlsx \
+  --no-scale-hint \
+  --scale-none
 ```
 
 ## Troubleshooting
@@ -260,10 +269,16 @@ python render_viewer_to_xlsx.py \
 3. **Processing errors**:
    ```bash
    # Use verbose mode to see detailed errors
-   python render_viewer_to_xlsx.py \
-     --filing problematic-filing.htm \
-     --out output.xlsx \
-     --verbose
+python render_viewer_to_xlsx.py \
+  --filing problematic-filing.htm \
+  --out output.xlsx \
+  --verbose
+
+# Capture the viewer payload for offline inspection
+python render_viewer_to_xlsx.py \
+  --filing problematic-filing.htm \
+  --out output.xlsx \
+  --save-viewer-json output/viewer-data.json
    ```
 
 ### Debug Mode

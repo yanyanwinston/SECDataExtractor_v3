@@ -189,9 +189,14 @@ def process_filing(args) -> None:
     # Step 4: Data parsing
     formatter = ValueFormatter(
         currency=args.currency,
-        scale_millions=not args.scale_none
+        scale_millions=not args.scale_none,
     )
-    data_parser = DataParser(formatter)
+    data_parser = DataParser(
+        formatter,
+        include_disclosures=args.include_disclosures,
+        label_style=args.label_style,
+        use_scale_hint=not args.no_scale_hint,
+    )
     result = data_parser.parse_viewer_data(viewer_data)
 
     if not result.success:
@@ -208,7 +213,7 @@ def process_filing(args) -> None:
 ### Presentation-Based Processing
 - **Exact Fidelity**: Uses presentation relationships to match iXBRL viewer exactly
 - **Tree Traversal**: Builds hierarchical structure from Arelle's presentation data
-- **Preferred Labels**: Uses the correct labels as they appear in the viewer
+- **Preferred Labels**: Pulls MetaLinks label roles (defaults to `terseLabel`, configurable via CLI)
 - **Automatic Format Detection**: Handles both sourceReports and legacy formats
 
 ### Smart Statement Processing
@@ -219,7 +224,8 @@ def process_filing(args) -> None:
 
 ### Value Formatting
 - Integrates with `ValueFormatter` for consistent number presentation
-- Handles currency scaling (millions), negative values (parentheses), EPS formatting
+- Honours XBRL decimal scale hints unless `--no-scale-hint` is passed (still scales to millions by default)
+- Applies finance-friendly conventions (parentheses for negatives, em dash for missing values, EPS precision)
 - Preserves both raw and formatted values for calculations and display
 
 ### Error Handling

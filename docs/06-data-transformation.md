@@ -7,8 +7,8 @@ This document defines the data transformation rules that convert raw XBRL values
 ## Formatting Requirements
 
 ### Currency Display Standards
-- **Base unit**: USD in millions
-- **Scaling**: Divide raw values by 1,000,000
+- **Base unit**: USD presented in millions (after restoring the filer’s original magnitude via XBRL `decimals`)
+- **Scaling**: Respect XBRL scale hints when available, then divide by 1,000,000 unless `--scale-none`
 - **Decimals**: Round to 0 decimal places for display
 - **Thousands separators**: Add commas (e.g., 1,234)
 - **Negatives**: Use parentheses format (150) instead of -150
@@ -20,7 +20,7 @@ This document defines the data transformation rules that convert raw XBRL values
 
 ### Share Counts
 - **Unit**: Millions of shares
-- **Scaling**: Divide by 1,000,000
+- **Scaling**: Respect `decimals` hints (many filers provide -6 for share counts) and present in millions
 - **Decimals**: Round to 0 decimal places
 - **Display**: No parentheses (shares are always positive)
 
@@ -72,41 +72,34 @@ def classify_value_type(cell: 'Cell') -> ValueType:
 
 ### Step 2: Value Scaling
 ```python
-def apply_scaling(value: Decimal, value_type: ValueType, decimals: Optional[int]) -> Decimal:
-    """Apply appropriate scaling based on value type."""
+def apply_scaling(
+    value: Decimal,
+    value_type: ValueType,
+    decimals: Optional[int],
+    *,
+    use_scale_hint: bool = True,
+    scale_millions: bool = True,
+) -> Decimal:
+    """Apply appropriate scaling based on metadata and CLI flags."""
 
-    if value_type == ValueType.CURRENCY:
-        # Scale to millions
-        if decimals is not None and decimals < 0:
-            # Value is already scaled (e.g., decimals=-6 means millions)
-            scaling_factor = 10 ** abs(decimals)
-            if scaling_factor >= 1_000_000:
-                return value
-            else:
-                return value / (1_000_000 / scaling_factor)
-        else:
-            # Raw value, scale to millions
-            return value / 1_000_000
+    scaled = value
 
-    elif value_type == ValueType.SHARES:
-        # Scale to millions
-        if decimals is not None and decimals < 0:
-            scaling_factor = 10 ** abs(decimals)
-            if scaling_factor >= 1_000_000:
-                return value
-            else:
-                return value / (1_000_000 / scaling_factor)
-        else:
-            return value / 1_000_000
+    if use_scale_hint and decimals is not None and decimals < 0:
+        # A negative decimals value means the fact was stored in a rounded unit
+        # (e.g. -6 → millions). Multiply to recover the true number before applying
+        # any presentation scaling.
+        scaled *= Decimal(10) ** Decimal(decimals)
 
-    elif value_type == ValueType.PER_SHARE:
-        # Keep original magnitude
-        return value
+    if value_type in {ValueType.CURRENCY, ValueType.SHARES} and scale_millions:
+        scaled /= Decimal(1_000_000)
 
-    else:
-        # No scaling for other types
-        return value
+    return scaled
 ```
+
+> **CLI interplay**
+>
+> - `render_viewer_to_xlsx.py --no-scale-hint` sets `use_scale_hint=False`, skipping the `decimals` multiplier step above (useful for diagnostics when a filer publishes incorrect metadata).
+> - `--scale-none` passes `scale_millions=False`, preserving the recovered raw magnitude in the workbook.
 
 ### Step 3: Precision and Rounding
 ```python

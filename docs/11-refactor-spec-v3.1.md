@@ -1003,7 +1003,12 @@ _Status:_ Core formatting assertions now live in `tests/test_excel_generator.py`
         currency=args.currency,
         scale_millions=not args.scale_none,
     )
-    data_parser = DataParser(formatter)
+    data_parser = DataParser(
+        formatter,
+        include_disclosures=args.include_disclosures,
+        label_style=args.label_style,
+        use_scale_hint=not args.no_scale_hint,
+    )
     result = data_parser.parse_viewer_data(viewer_data)
 
     if not result.success:
@@ -1012,7 +1017,7 @@ _Status:_ Core formatting assertions now live in `tests/test_excel_generator.py`
 
 * Drop the `--use-legacy` / `--use-presentation` switches entirely.
 * Treat parser failures as hard errors so the CLI mirrors the Excel generator's expectations.
-* New toggle surfaces MetaLinks options to the CLI (`--include-disclosures`, `--label-style standard|terse`, `--dump-role-map <csv>`).
+* New toggles surface MetaLinks options and diagnostics to the CLI (`--include-disclosures`, `--label-style standard|terse`, `--dump-role-map <csv>`, `--save-viewer-json <path>`, `--no-scale-hint`).
 ### Step 6.2: Validation Plan
 
 1. **Regression sweep**: run the updated presentation pipeline against the existing fixture set and a handful of live filings.

@@ -79,7 +79,12 @@ python render_viewer_to_xlsx.py \
   [--one-period] \
   [--periods <PERIOD_LIST>] \
   [--currency <CURRENCY>] \
-  [--scale-millions] \
+  [--scale-millions | --scale-none] \
+  [--include-disclosures] \
+  [--label-style {terse,standard}] \
+  [--dump-role-map <CSV>] \
+  [--save-viewer-json <PATH>] \
+  [--no-scale-hint] \
   [--verbose] \
   [--temp-dir <DIRECTORY>] \
   [--keep-temp] \
@@ -177,6 +182,21 @@ Explicitly enable scaling to millions (default behavior).
 # Show raw values
 --scale-none
 ```
+
+#### `--include-disclosures`
+Include disclosure/detail presentation roles in addition to the primary statements. Useful when you need the narrative notes or tables that accompany the core financials.
+
+#### `--dump-role-map <CSV>`
+Write the MetaLinks role catalogue (R#, `groupType`, etc.) to a CSV file for inspection. Handy when tuning statement allowlists or diagnosing why a sheet was filtered out.
+
+#### `--label-style {terse,standard}`
+Choose which XBRL label role to use for row headers. The default `terse` matches the viewer’s compact presentation; `standard` yields the longer GAAP descriptions.
+
+#### `--no-scale-hint`
+Ignore XBRL `decimals` metadata when scaling numeric values. Use this when a filing publishes incorrect scale hints and you want the raw fact value before applying the millions display.
+
+#### `--save-viewer-json <PATH>`
+Persist the extracted viewer payload to disk. This JSON includes facts, contexts, and label metadata, making it easier to debug period selection or unit issues between runs.
 
 #### `--verbose` / `-v`
 Enable detailed logging output.
@@ -280,6 +300,37 @@ Examples:
         '--scale-none',
         action='store_true',
         help='Display raw values without scaling'
+    )
+
+    parser.add_argument(
+        '--include-disclosures',
+        action='store_true',
+        help='Include disclosure/detail presentation roles in the workbook'
+    )
+
+    parser.add_argument(
+        '--dump-role-map',
+        type=Path,
+        help='Write MetaLinks role metadata to CSV for inspection'
+    )
+
+    parser.add_argument(
+        '--label-style',
+        choices=['terse', 'standard'],
+        default='terse',
+        help='Preferred concept label style for Excel output (default: terse)'
+    )
+
+    parser.add_argument(
+        '--no-scale-hint',
+        action='store_true',
+        help='Ignore XBRL decimals when scaling numeric values'
+    )
+
+    parser.add_argument(
+        '--save-viewer-json',
+        type=Path,
+        help='Write the extracted viewer JSON payload to disk'
     )
 
     # Processing options
