@@ -334,23 +334,24 @@ class PresentationParser:
         if not concept_data:
             return self._humanize_concept_name(concept)
 
-        # Try canonical label fields (viewer JSON often stores under "l" or "label")
-        for key in ('l', 'label', 'en', 'en-us'):
-            label_value = concept_data.get(key)
-            if isinstance(label_value, str) and label_value.strip():
-                return label_value
-
-        # Try labels dictionary (may be nested by role and language)
+        # Try labels dictionary first so terse/total variants take precedence
         labels = concept_data.get('labels', {})
-        preferred_order = ['std', 'terseLabel', 'totalLabel', 'verboseLabel', 'label']
+        preferred_order = ['terseLabel', 'totalLabel', 'verboseLabel', 'label', 'std']
         for label_type in preferred_order:
             label_data = labels.get(label_type)
             if isinstance(label_data, dict):
                 for lang_key in ('en-us', 'en'):
-                    if label_data.get(lang_key):
-                        return label_data[lang_key]
-            elif label_data:
-                return str(label_data)
+                    value = label_data.get(lang_key)
+                    if isinstance(value, str) and value.strip():
+                        return value
+            elif isinstance(label_data, str) and label_data.strip():
+                return label_data
+
+        # Fall back to canonical label fields (viewer JSON often stores under "l" or language keys)
+        for key in ('l', 'label', 'en', 'en-us'):
+            label_value = concept_data.get(key)
+            if isinstance(label_value, str) and label_value.strip():
+                return label_value
 
         # Fallback to humanized concept name
         return self._humanize_concept_name(concept)

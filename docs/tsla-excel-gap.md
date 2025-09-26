@@ -24,7 +24,7 @@
 4. Implement the diagnostic flag for QA visibility.
 5. Add a regression test asserting the TSLA workbook contains only the six primary sheets by default.
 
-_Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataParser` filters by `groupType`, CLI exposes `--include-disclosures` and `--dump-role-map`). Regression test for default sheet count pending once we record a curated expectation file. Period extraction now consults the filtered statements, so redundant disclosure contexts are no longer considered during column selection.
+_Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataParser` filters by `groupType`, CLI exposes `--include-disclosures`/`--dump-role-map`). Regression test for default sheet count pending once we record a curated expectation file. Period extraction now consults the filtered statements, so redundant disclosure contexts are no longer considered during column selection, and Excel rows default to `terseLabel` for viewer-style naming.
 
 ## Problem 2 — Period Overload
 - Primary statements list every context label we encounter (`Jan 23, 2025`, `Jan 09, 2025`, …), while Tesla keeps the expected annual columns (`Dec. 31, 2024`, `Dec. 31, 2023`, `Dec. 31, 2022`).
@@ -38,7 +38,7 @@ _Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataP
 - Prefer contexts tied to the filing fiscal period (match `DocumentPeriodEndDate`).
 - Deduplicate contexts that differ only by instant/duration flag once the preferred set is chosen.
 
-_Status:_ Context gathering now runs after the sheet filter, and heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries. Remaining gap: polish labels (e.g., map `Jan 01, 2025` to `Dec. 31, 2024`), respect fiscal calendars, and expose config for quarterly vs annual views.
+_Status:_ Context gathering now runs after the sheet filter, heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries, and row labels prefer `terseLabel` to match the viewer. Remaining gap: polish period headers (e.g., map `Jan 01, 2025` to `Dec. 31, 2024`), respect fiscal calendars, and expose config for quarterly vs annual views.
 
 ### Open Questions
 - How do we expose configuration (CLI flags vs coded defaults) for annual vs quarterly focus?

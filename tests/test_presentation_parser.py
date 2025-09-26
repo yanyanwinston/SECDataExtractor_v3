@@ -104,6 +104,18 @@ class TestPresentationParser:
         assert isinstance(label, str)
         assert len(label) > 0
 
+        # Prefer terse label when available
+        custom_concepts = {
+            'custom:Example': {
+                'labels': {
+                    'terseLabel': {'en-us': 'Terse Example'},
+                    'std': {'en-us': 'Standard Example'}
+                }
+            }
+        }
+        terse_label = self.parser._get_concept_label('custom:Example', custom_concepts)
+        assert terse_label == 'Terse Example'
+
         # Test concept not in definitions (should get humanized name)
         missing_concept = "us-gaap:MissingConceptExample"
         label = self.parser._get_concept_label(missing_concept, concepts)
