@@ -100,38 +100,27 @@ class DataParser:
         """Extract company name from viewer data."""
         company_name = ""
 
-        # Handle new sourceReports format
-        if 'sourceReports' in data:
-            source_reports = data['sourceReports']
-            if isinstance(source_reports, list) and len(source_reports) > 0:
-                first_report = source_reports[0]
-                if 'targetReports' in first_report:
-                    target_reports = first_report['targetReports']
-                    if isinstance(target_reports, list) and len(target_reports) > 0:
-                        target_report = target_reports[0]
-                        facts = target_report.get('facts', {})
-                        concepts = target_report.get('concepts', {})
+        source_reports = data.get('sourceReports') or []
+        if isinstance(source_reports, list) and source_reports:
+            target_reports = source_reports[0].get('targetReports') or []
+            if isinstance(target_reports, list) and target_reports:
+                facts = target_reports[0].get('facts', {})
+                for fact_entry in facts.values():
+                    context = fact_entry.get('a')
+                    concept = context.get('c', '') if isinstance(context, dict) else ''
+                    if 'entityregistrantname' in concept.lower():
+                        company_name = fact_entry.get('v', '')
+                        if company_name:
+                            break
 
-                        # Look for entity name in facts
-                        for fact_data in facts.values():
-                            for concept_name in fact_data.keys():
-                                if 'entityregistrantname' in concept_name.lower():
-                                    company_name = fact_data[concept_name].get('v', '')
-                                    if company_name:
-                                        break
-                            if company_name:
-                                break
-
-        # Check facts for company name concept (older format)
         if not company_name:
             facts = data.get('facts', {})
-            for fact_id, fact_data in facts.items():
-                concept = fact_data.get('c', '')
+            for fact_entry in facts.values():
+                concept = fact_entry.get('c', '')
                 if 'entityregistrantname' in concept.lower():
-                    company_name = fact_data.get('v', '')
+                    company_name = fact_entry.get('v', '')
                     break
 
-        # Fallback to other metadata fields
         if not company_name:
             metadata = data.get('meta', {})
             company_name = metadata.get('entityName', metadata.get('companyName', 'Unknown Company'))
@@ -140,26 +129,52 @@ class DataParser:
 
     def _extract_filing_date(self, data: Dict[str, Any]) -> str:
         """Extract filing date from viewer data."""
-        # Look for document date or filing date concepts
-        facts = data.get('facts', {})
-        for fact_id, fact_data in facts.items():
-            concept = fact_data.get('c', '')
-            if any(term in concept.lower() for term in ['documentdate', 'filingdate', 'periodenddate']):
-                return fact_data.get('v', '')
+        source_reports = data.get('sourceReports') or []
+        if isinstance(source_reports, list) and source_reports:
+            target_reports = source_reports[0].get('targetReports') or []
+            if isinstance(target_reports, list) and target_reports:
+                facts = target_reports[0].get('facts', {})
+                for fact_entry in facts.values():
+                    context = fact_entry.get('a')
+                    concept = context.get('c', '') if isinstance(context, dict) else ''
+                    if any(term in concept.lower() for term in ['documentdate', 'filingdate', 'periodenddate']):
+                        value = fact_entry.get('v')
+                        if value:
+                            return value
 
-        # Fallback
+        facts = data.get('facts', {})
+        for fact_entry in facts.values():
+            concept = fact_entry.get('c', '')
+            if any(term in concept.lower() for term in ['documentdate', 'filingdate', 'periodenddate']):
+                value = fact_entry.get('v')
+                if value:
+                    return value
+
         return data.get('meta', {}).get('filingDate', 'Unknown Date')
 
     def _extract_form_type(self, data: Dict[str, Any]) -> str:
         """Extract form type from viewer data."""
-        # Look for document type concept
-        facts = data.get('facts', {})
-        for fact_id, fact_data in facts.items():
-            concept = fact_data.get('c', '')
-            if 'documenttype' in concept.lower():
-                return fact_data.get('v', '')
+        source_reports = data.get('sourceReports') or []
+        if isinstance(source_reports, list) and source_reports:
+            target_reports = source_reports[0].get('targetReports') or []
+            if isinstance(target_reports, list) and target_reports:
+                facts = target_reports[0].get('facts', {})
+                for fact_entry in facts.values():
+                    context = fact_entry.get('a')
+                    concept = context.get('c', '') if isinstance(context, dict) else ''
+                    if 'documenttype' in concept.lower():
+                        value = fact_entry.get('v')
+                        if value:
+                            return value
 
-        # Fallback
+        facts = data.get('facts', {})
+        for fact_entry in facts.values():
+            concept = fact_entry.get('c', '')
+            if 'documenttype' in concept.lower():
+                value = fact_entry.get('v')
+                if value:
+                    return value
+
         return data.get('meta', {}).get('formType', 'Unknown Form')
 
     def _parse_with_presentation(self, viewer_data: Dict[str, Any]) -> List[Statement]:
