@@ -32,8 +32,10 @@
 - PRs outline context, approach, and validation commands; attach viewer JSON snippets or Excel diffs when clarifying impact.
 - Before review, run `PYTHONPATH=. pytest`, `black`, `flake8`, plus anything specific to changed modules, and document config shifts in `docs/` or CLI help.
 
+## Current Status
 - Phases 1–2 shipped: viewer schema captured in `docs/11-refactor-spec-v3.1.md`; presentation models live in `src/processor/presentation_models.py`.
-- Phase 3.1–3.2 integrated: `PresentationParser`, `FactMatcher`, and `DataParser` run the presentation-first path, applying the MetaLinks `groupType` strategy you surfaced so we keep the primary financial statements and drop disclosure-only roles, then pick periods per statement using `DocumentPeriodEndDate` fallbacks.
-- Phase 3.3 additions: CLI now exposes `--label-style`, `--save-viewer-json`, and `--no-scale-hint`; `FactMatcher` applies XBRL scale hints only for negative decimals while `ValueFormatter` stays in millions by default; label defaults remain `terseLabel` but are switchable.
-- Phase 4 prep: Excel generator consumes the new tables, but column header polish (calendar-aware labels) and quarterly vs annual configuration remain open; compare TSLA workbook against `Financial_Report.xlsx` once headers are fixed.
-- Regression status: updated suites in `tests/test_presentation_parser.py`, `tests/test_integration_presentation.py`, and `tests/test_excel_generator.py` cover statement filtering, label toggles, and scaling; live filing sweep + period header assertions still pending before release tagging.
+- Phase 3 pipeline: `PresentationParser`, `FactMatcher`, and `DataParser` run the presentation-first path, applying the MetaLinks `groupType` filter so we keep the primary financial statements and drop disclosure-only roles, then pick periods per statement via `DocumentPeriodEndDate` fallbacks.
+- Phase 3.3–3.4 UX: CLI exposes `--label-style`, `--save-viewer-json`, and `--no-scale-hint`, plus dimensional toggles (`--dimension-breakdown` default, `--collapse-dimensions`); `FactMatcher` pulls label maps from `PresentationParser`, expands axis/member rows by default, and still applies XBRL scale hints only for negative decimals while `ValueFormatter` stays in millions.
+- Phase 4 prep: Excel generator consumes the new tables; column header polish (calendar-aware labels) and quarterly vs annual configuration remain open—compare the TSLA workbook against `Financial_Report.xlsx` once headers are fixed.
+- Cover metadata: `DataParser` now reads company name, form type, and dates from viewer `sourceReports` before falling back to legacy `facts` / `meta` blocks.
+- Regression status: updated suites in `tests/test_presentation_parser.py`, `tests/test_integration_presentation.py`, and `tests/test_excel_generator.py` cover statement filtering, label toggles, scaling, and dimension expansion/collapse; live filing sweep plus period header assertions still pending before release tagging.
