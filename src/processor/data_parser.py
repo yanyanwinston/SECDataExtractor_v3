@@ -3,6 +3,7 @@ Data parser for converting viewer JSON to structured data models.
 """
 
 import logging
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Set
 
@@ -63,7 +64,7 @@ class DataParser:
             filing_date = self._extract_filing_date(viewer_data)
             form_type = self._extract_form_type(viewer_data)
 
-            statements = self._parse_with_presentation(viewer_data)
+            statements = self._parse_with_presentation(viewer_data, form_type)
 
             if not statements:
                 error_message = "No presentation statements with fact data were produced"
@@ -177,7 +178,11 @@ class DataParser:
 
         return data.get('meta', {}).get('formType', 'Unknown Form')
 
-    def _parse_with_presentation(self, viewer_data: Dict[str, Any]) -> List[Statement]:
+    def _parse_with_presentation(
+        self,
+        viewer_data: Dict[str, Any],
+        form_type: str
+    ) -> List[Statement]:
         """New presentation-based parsing method.
 
         Args:
@@ -206,7 +211,10 @@ class DataParser:
         if not facts:
             raise ValueError("No facts found in viewer data")
 
-        document_period_end_dates = self._extract_document_period_end_dates(viewer_data)
+        period_selection_context = self._build_period_selection_context(
+            viewer_data,
+            form_type
+        )
 
         # Match facts to presentation for each statement
         primary_tables = []
@@ -224,7 +232,9 @@ class DataParser:
                 periods_for_statement = self._select_periods_for_statement(
                     pres_statement,
                     periods_for_statement,
-                    document_period_end_dates
+                    period_selection_context,
+                    facts,
+                    concepts_for_statement,
                 )
 
                 if not periods_for_statement:
@@ -349,7 +359,9 @@ class DataParser:
         self,
         statement: PresentationStatement,
         periods: List[Period],
-        document_end_dates: List[datetime]
+        context: Dict[str, Any],
+        facts: Dict[str, Any],
+        concepts_for_statement: Optional[Set[str]],
     ) -> List[Period]:
         """Select appropriate periods for a specific statement."""
         if not periods:
@@ -360,6 +372,18 @@ class DataParser:
         durations = [p for p in sorted_periods if not p.instant]
 
         statement_type = statement.statement_type
+        document_end_dates: List[datetime] = context.get('document_end_dates', []) or []
+        fiscal_year_starts: List[datetime] = context.get('fiscal_year_starts', []) or []
+
+        period_usage = self._compute_period_usage(concepts_for_statement, facts)
+        instant_usage = {
+            period.end_date: period_usage.get(period.end_date, 0)
+            for period in instants
+        }
+        duration_usage = {
+            period.end_date: period_usage.get(period.end_date, 0)
+            for period in durations
+        }
 
         def find_matching_period(target_date: datetime, require_instant: bool, used: set) -> Optional[Period]:
             candidates = instants if require_instant else durations
@@ -380,7 +404,14 @@ class DataParser:
 
             return None
 
-        targets = document_end_dates or []
+        targets = list(document_end_dates)
+        if instants:
+            instant_end_dates = {p.end_date for p in instants}
+            for fy_date in fiscal_year_starts:
+                iso = fy_date.date().isoformat()
+                if iso in instant_end_dates and fy_date not in targets:
+                    targets.append(fy_date)
+
         selected: List[Period] = []
         used_periods: set = set()
 
@@ -405,7 +436,15 @@ class DataParser:
                     selected.append(period)
                     used_periods.add(id(period))
             if len(selected) < desired_count:
-                for period in instants:
+                weighted_instants = sorted(
+                    instants,
+                    key=lambda p: (
+                        instant_usage.get(p.end_date, 0),
+                        datetime.strptime(p.end_date, '%Y-%m-%d')
+                    ),
+                    reverse=True
+                )
+                for period in weighted_instants:
                     if id(period) in used_periods:
                         continue
                     period.label = self._format_period_display_label(
@@ -445,7 +484,16 @@ class DataParser:
                     selected.append(period)
                     used_periods.add(id(period))
             if len(selected) < desired_count:
-                for period in durations + instants:
+                weighted_durations = sorted(
+                    durations,
+                    key=lambda p: (
+                        duration_usage.get(p.end_date, 0),
+                        datetime.strptime(p.end_date, '%Y-%m-%d')
+                    ),
+                    reverse=True
+                )
+                fallback_candidates = weighted_durations + instants
+                for period in fallback_candidates:
                     if id(period) in used_periods:
                         continue
                     period.label = self._format_period_display_label(
@@ -464,9 +512,24 @@ class DataParser:
 
         return selected
 
+    def _build_period_selection_context(
+        self,
+        viewer_data: Dict[str, Any],
+        form_type: str
+    ) -> Dict[str, Any]:
+        return {
+            'document_end_dates': self._extract_document_period_end_dates(viewer_data),
+            'fiscal_year_starts': self._extract_fiscal_year_start_dates(viewer_data),
+            'form_type': form_type,
+        }
+
     def _extract_document_period_end_dates(self, viewer_data: Dict[str, Any]) -> List[datetime]:
         """Extract document period end dates to help align reporting periods."""
-        facts = viewer_data['sourceReports'][0]['targetReports'][0].get('facts', {})
+        facts = (
+            viewer_data.get('sourceReports', [{}])[0]
+            .get('targetReports', [{}])[0]
+            .get('facts', {})
+        )
         end_dates: Set[datetime] = set()
 
         for fact_data in facts.values():
@@ -487,9 +550,88 @@ class DataParser:
 
         return sorted(end_dates, reverse=True)
 
+    def _extract_fiscal_year_start_dates(self, viewer_data: Dict[str, Any]) -> List[datetime]:
+        """Extract fiscal year start dates (as day-after fiscal year end) from viewer data."""
+
+        facts = (
+            viewer_data.get('sourceReports', [{}])[0]
+            .get('targetReports', [{}])[0]
+            .get('facts', {})
+        )
+
+        fiscal_year_focus: Optional[int] = None
+        fiscal_year_end_value: Optional[str] = None
+
+        for fact in facts.values():
+            for context in fact.values():
+                if not isinstance(context, dict):
+                    continue
+                concept = context.get('c')
+                if concept == 'dei:DocumentFiscalYearFocus':
+                    value = fact.get('v') or context.get('v')
+                    if value:
+                        try:
+                            fiscal_year_focus = int(str(value).strip())
+                        except ValueError:
+                            continue
+                elif concept == 'dei:CurrentFiscalYearEndDate':
+                    value = fact.get('v') or context.get('v')
+                    if isinstance(value, str) and len(value) >= 7:
+                        fiscal_year_end_value = value
+
+        if fiscal_year_focus is None or fiscal_year_end_value is None:
+            return []
+
+        clean_value = fiscal_year_end_value.strip()
+        if clean_value.startswith('--'):
+            clean_value = clean_value[2:]
+
+        try:
+            month = int(clean_value[:2])
+            day = int(clean_value[3:5])
+        except (ValueError, IndexError):
+            return []
+
+        candidate_years = {fiscal_year_focus, fiscal_year_focus - 1}
+        starts: Set[datetime] = set()
+
+        for year in candidate_years:
+            try:
+                fiscal_year_end = datetime(year, month, day)
+                starts.add(fiscal_year_end + timedelta(days=1))
+            except ValueError:
+                continue
+
+        return sorted(starts, reverse=True)
+
     def _format_period_display_label(self, target_date: datetime, is_instant: bool) -> str:
         """Human-friendly label for a reporting period."""
-        return target_date.strftime('%b %d, %Y')
+        display_date = target_date
+        if is_instant:
+            display_date = target_date - timedelta(days=1)
+        return display_date.strftime('%b %d, %Y')
+
+    def _compute_period_usage(
+        self,
+        concepts: Optional[Set[str]],
+        facts: Dict[str, Any]
+    ) -> Counter:
+        if not concepts:
+            return Counter()
+
+        counts: Counter = Counter()
+
+        for fact_data in facts.values():
+            for context in fact_data.values():
+                if not isinstance(context, dict):
+                    continue
+                if context.get('c') not in concepts:
+                    continue
+                period = context.get('p')
+                if period:
+                    counts[period] += 1
+
+        return counts
 
     def _statement_table_has_data(self, table) -> bool:
         """Determine whether a matched statement table contains any facts."""
