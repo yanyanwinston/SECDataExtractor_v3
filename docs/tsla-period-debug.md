@@ -1,10 +1,10 @@
 # Period Selection Debug Notes
 
 ## Where periods come from
-- `output/viewer-data.json`: Arelle viewer payload saved after `render_viewer_to_xlsx.py` runs (`sourceReports[0].targetReports[0]`).
+- `output/viewer-data.json`: enable via `--save-viewer-json output/viewer-data.json` when running `render_viewer_to_xlsx.py`. The payload lives under `sourceReports[0].targetReports[0]` and contains:
   - `facts`: compressed fact contexts (`'p'` field holds the period – instant `YYYY-MM-DD` or duration `start/end`).
   - `concepts`: label metadata.
-- `downloads/TSLA/10-K_2025-01-29/MetaLinks.json`: role metadata (`groupType`, `subGroupType`) **and** concept label roles (since the latest extractor stores `concept_labels`).
+- `downloads/TSLA/10-K_2025-01-29/MetaLinks.json`: role metadata (`groupType`, `subGroupType`) **and** concept label roles (stored by `ViewerDataExtractor`).
 
 ## Code path (per statement)
 1. `render_viewer_to_xlsx.py` → `ViewerDataExtractor.extract_viewer_data`
@@ -26,6 +26,12 @@
 
 ## Useful inspection commands
 ```bash
+# 0. Generate the viewer payload (only needed once per filing)
+python render_viewer_to_xlsx.py \
+  --filing downloads/TSLA/10-K_2025-01-29/tsla-20241231.htm \
+  --out output/TSLA-10K-2024.xlsx \
+  --save-viewer-json output/viewer-data.json
+
 # 1. Inspect document period end dates in the parsed viewer data
 python - <<'PY'
 import json

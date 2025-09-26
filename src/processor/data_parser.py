@@ -3,7 +3,8 @@ Data parser for converting viewer JSON to structured data models.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional, Set
 
 from .data_models import Statement, Period, Row, ProcessingResult
 from .value_formatter import ValueFormatter
@@ -180,6 +181,8 @@ class DataParser:
         if not facts:
             raise ValueError("No facts found in viewer data")
 
+        document_period_end_dates = self._extract_document_period_end_dates(viewer_data)
+
         # Match facts to presentation for each statement
         primary_tables = []
         supplemental_tables = []
@@ -195,7 +198,8 @@ class DataParser:
 
                 periods_for_statement = self._select_periods_for_statement(
                     pres_statement,
-                    periods_for_statement
+                    periods_for_statement,
+                    document_period_end_dates
                 )
 
                 if not periods_for_statement:
@@ -319,7 +323,8 @@ class DataParser:
     def _select_periods_for_statement(
         self,
         statement: PresentationStatement,
-        periods: List[Period]
+        periods: List[Period],
+        document_end_dates: List[datetime]
     ) -> List[Period]:
         """Select appropriate periods for a specific statement."""
         if not periods:
@@ -331,19 +336,135 @@ class DataParser:
 
         statement_type = statement.statement_type
 
+        def find_matching_period(target_date: datetime, require_instant: bool, used: set) -> Optional[Period]:
+            candidates = instants if require_instant else durations
+            target_iso = target_date.date().isoformat()
+            for period in candidates:
+                if period.end_date == target_iso and id(period) not in used:
+                    return period
+
+            for delta in (1, -1):
+                alt_iso = (target_date + timedelta(days=delta)).date().isoformat()
+                for period in candidates:
+                    if period.end_date == alt_iso and id(period) not in used:
+                        return period
+
+            for period in candidates:
+                if id(period) not in used:
+                    return period
+
+            return None
+
+        targets = document_end_dates or []
+        selected: List[Period] = []
+        used_periods: set = set()
+
         if statement_type == StatementType.BALANCE_SHEET:
-            selected = instants[:2] or sorted_periods[:2]
+            desired_count = 2
+            desired_targets = list(targets)
+            while desired_targets and len(desired_targets) < desired_count:
+                last = desired_targets[-1]
+                try:
+                    desired_targets.append(last.replace(year=last.year - 1))
+                except ValueError:
+                    desired_targets.append(last - timedelta(days=365))
+
+            if not desired_targets:
+                desired_targets = []
+
+            desired = desired_targets[:desired_count]
+            for target_date in desired:
+                period = find_matching_period(target_date, require_instant=True, used=used_periods)
+                if period:
+                    period.label = self._format_period_display_label(target_date, is_instant=True)
+                    selected.append(period)
+                    used_periods.add(id(period))
+            if len(selected) < desired_count:
+                for period in instants:
+                    if id(period) in used_periods:
+                        continue
+                    period.label = self._format_period_display_label(
+                        datetime.strptime(period.end_date, '%Y-%m-%d'),
+                        is_instant=True
+                    )
+                    selected.append(period)
+                    used_periods.add(id(period))
+                    if len(selected) == desired_count:
+                        break
+            if not selected:
+                selected = instants[:desired_count] or sorted_periods[:desired_count]
+
         elif statement_type in {
             StatementType.INCOME_STATEMENT,
             StatementType.CASH_FLOWS,
             StatementType.COMPREHENSIVE_INCOME,
             StatementType.EQUITY
         }:
-            selected = durations[:3] or instants[:3] or sorted_periods[:3]
+            desired_count = 3
+            desired_targets = list(targets)
+            while desired_targets and len(desired_targets) < desired_count:
+                last = desired_targets[-1]
+                try:
+                    desired_targets.append(last.replace(year=last.year - 1))
+                except ValueError:
+                    desired_targets.append(last - timedelta(days=365))
+
+            if not desired_targets:
+                desired_targets = []
+
+            desired = desired_targets[:desired_count]
+            for target_date in desired:
+                period = find_matching_period(target_date, require_instant=False, used=used_periods)
+                if period:
+                    period.label = self._format_period_display_label(target_date, is_instant=False)
+                    selected.append(period)
+                    used_periods.add(id(period))
+            if len(selected) < desired_count:
+                for period in durations + instants:
+                    if id(period) in used_periods:
+                        continue
+                    period.label = self._format_period_display_label(
+                        datetime.strptime(period.end_date, '%Y-%m-%d'),
+                        is_instant=period.instant
+                    )
+                    selected.append(period)
+                    used_periods.add(id(period))
+                    if len(selected) == desired_count:
+                        break
+            if not selected:
+                selected = durations[:desired_count] or instants[:desired_count] or sorted_periods[:desired_count]
+
         else:
             selected = sorted_periods[:3]
 
         return selected
+
+    def _extract_document_period_end_dates(self, viewer_data: Dict[str, Any]) -> List[datetime]:
+        """Extract document period end dates to help align reporting periods."""
+        facts = viewer_data['sourceReports'][0]['targetReports'][0].get('facts', {})
+        end_dates: Set[datetime] = set()
+
+        for fact_data in facts.values():
+            for context in fact_data.values():
+                if not isinstance(context, dict):
+                    continue
+                concept = context.get('c', '').lower()
+                if 'documentperiodenddate' not in concept:
+                    continue
+                period_str = context.get('p')
+                if not period_str:
+                    continue
+                end_str = period_str.split('/')[-1]
+                try:
+                    end_dates.add(datetime.strptime(end_str, '%Y-%m-%d'))
+                except ValueError:
+                    continue
+
+        return sorted(end_dates, reverse=True)
+
+    def _format_period_display_label(self, target_date: datetime, is_instant: bool) -> str:
+        """Human-friendly label for a reporting period."""
+        return target_date.strftime('%b %d, %Y')
 
     def _statement_table_has_data(self, table) -> bool:
         """Determine whether a matched statement table contains any facts."""

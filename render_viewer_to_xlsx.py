@@ -21,6 +21,7 @@ Examples:
 
 import argparse
 import csv
+import json
 import logging
 import sys
 import tempfile
@@ -132,6 +133,12 @@ Examples:
         help='Preferred concept label style for Excel output (default: terse)'
     )
 
+    parser.add_argument(
+        '--save-viewer-json',
+        type=Path,
+        help='Write the extracted viewer JSON payload to disk'
+    )
+
     # Processing options
     parser.add_argument(
         '--verbose', '-v',
@@ -193,6 +200,22 @@ def _dump_role_map(role_map, output_path: Path) -> None:
         logger.info("Role metadata written to %s", output_path)
     except Exception as exc:
         logger.warning("Failed to write role metadata CSV: %s", exc)
+
+
+def _dump_viewer_json(viewer_data, output_path: Path) -> None:
+    """Persist the extracted viewer JSON payload."""
+    if not viewer_data:
+        logger.warning("Viewer data not available; skipping save")
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with output_path.open('w', encoding='utf-8') as handle:
+            json.dump(viewer_data, handle)
+        logger.info("Viewer JSON written to %s", output_path)
+    except Exception as exc:
+        logger.warning("Failed to write viewer JSON: %s", exc)
 
 
 def validate_arguments(args) -> None:
@@ -285,6 +308,9 @@ def process_filing(args) -> None:
 
         if args.dump_role_map:
             _dump_role_map(viewer_data.get('role_map'), args.dump_role_map)
+
+        if args.save_viewer_json:
+            _dump_viewer_json(viewer_data, args.save_viewer_json)
 
         logger.info("Viewer data extracted successfully")
 

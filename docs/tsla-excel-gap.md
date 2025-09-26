@@ -38,7 +38,7 @@ _Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataP
 - Prefer contexts tied to the filing fiscal period (match `DocumentPeriodEndDate`).
 - Deduplicate contexts that differ only by instant/duration flag once the preferred set is chosen.
 
-_Status:_ Context gathering now runs after the sheet filter, heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries, and row labels prefer `terseLabel` to match the viewer. Remaining gap: polish period headers (e.g., map `Jan 01, 2025` to `Dec. 31, 2024`), respect fiscal calendars, and expose config for quarterly vs annual views.
+_Status:_ Context gathering now runs after the sheet filter, heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries, row labels prefer `terseLabel`, and period headers now snap to the filing’s `DocumentPeriodEndDate`. Remaining gap: normalize label casing (e.g., drop commas if required), respect non-calendar fiscal calendars, and expose config for quarterly vs annual views.
 
 ### Open Questions
 - How do we expose configuration (CLI flags vs coded defaults) for annual vs quarterly focus?
@@ -46,7 +46,7 @@ _Status:_ Context gathering now runs after the sheet filter, heuristic trimming 
 - Do we need company-specific heuristics (e.g., entities with non-calendar fiscal years)?
 
 ## Next Steps
-1. Lock in label/alias mapping so sheet headers read like `Dec. 31, 2024` / `Dec. 31, 2023` instead of raw context dates.
+1. Smooth period header formatting across issuers (e.g., optional `Year ended` phrasing, quarter labelling, fiscal calendar awareness).
 2. Add per-statement period configuration (annual-only, quarterly+annual) and CLI switches for analysts.
 3. Extend regression tests to assert sheet count and canonical period headers for TSLA (and another issuer once ready).
 4. Re-run the CLI on TSLA and capture a workbook diff against `Financial_Report.xlsx` for validation.
