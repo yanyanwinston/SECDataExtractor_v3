@@ -32,9 +32,8 @@
 - PRs outline context, approach, and validation commands; attach viewer JSON snippets or Excel diffs when clarifying impact.
 - Before review, run `PYTHONPATH=. pytest`, `black`, `flake8`, plus anything specific to changed modules, and document config shifts in `docs/` or CLI help.
 
-## Current Refactor Status (v3.1)
 - Phases 1–2 complete: viewer schema captured in `docs/11-refactor-spec-v3.1.md` and presentation models live in `src/processor/presentation_models.py`.
 - Phase 3 wrapped: `PresentationParser`, `FactMatcher`, and `DataParser` now run the presentation-first path end-to-end.
-- Phase 4 stabilized: `ExcelGenerator` consumes `presentation_node` metadata with styles wired via `openpyxl.styles` to keep indentation/total formatting aligned to the viewer.
-- Phase 5 gaining coverage: parser/model specs sit under `tests/test_presentation_*.py`, end-to-end exercised via `tests/test_integration_presentation.py`, and `tests/test_excel_generator.py` checks workbook formatting; broader live-filing regression sweep still pending.
+- Phase 4 stabilized: `ExcelGenerator` consumes `presentation_node` metadata with styles wired via `openpyxl.styles` and the CLI gained `--include-disclosures` / `--dump-role-map` toggles.
+- Phase 5 gaining coverage: parser/model specs sit under `tests/test_presentation_*.py`, integration tests assert sheet filtering + per-statement period heuristics, and `tests/test_excel_generator.py` checks workbook formatting; broader live-filing regression sweep still pending.
 - Phase 6 cutover done: `render_viewer_to_xlsx.py` only invokes the new pipeline; schedule a regression sweep + doc updates before tagging the release.

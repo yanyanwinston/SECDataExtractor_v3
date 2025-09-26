@@ -38,7 +38,7 @@ _Status_: Steps 1–4 implemented (`ViewerDataExtractor` loads MetaLinks, `DataP
 - Prefer contexts tied to the filing fiscal period (match `DocumentPeriodEndDate`).
 - Deduplicate contexts that differ only by instant/duration flag once the preferred set is chosen.
 
-_Status:_ Context gathering now runs after the sheet filter, and heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries. Remaining gap: polish labels (e.g., map `Jan 01, 2025` to `Dec. 31, 2024`) and handle issuers with different filing cadences.
+_Status:_ Context gathering now runs after the sheet filter, and heuristic trimming keeps two instants for balance sheets and up to three durations for the other primaries. Remaining gap: polish labels (e.g., map `Jan 01, 2025` to `Dec. 31, 2024`), respect fiscal calendars, and expose config for quarterly vs annual views.
 
 ### Open Questions
 - How do we expose configuration (CLI flags vs coded defaults) for annual vs quarterly focus?
@@ -46,7 +46,7 @@ _Status:_ Context gathering now runs after the sheet filter, and heuristic trimm
 - Do we need company-specific heuristics (e.g., entities with non-calendar fiscal years)?
 
 ## Next Steps
-1. Prototype a role-filtering layer in `PresentationParser`/`DataParser` that maps role URIs to canonical sheet assignments and drops unneeded roles by default.
-2. Update `FactMatcher.extract_periods_from_facts` (or downstream filtering) to return a curated, statement-specific period list.
-3. Add regression tests comparing sheet counts and period headers against fixture expectations.
-4. Re-run the CLI on TSLA and adjust heuristics until the workbook resembles Financial_Report.xlsx.
+1. Lock in label/alias mapping so sheet headers read like `Dec. 31, 2024` / `Dec. 31, 2023` instead of raw context dates.
+2. Add per-statement period configuration (annual-only, quarterly+annual) and CLI switches for analysts.
+3. Extend regression tests to assert sheet count and canonical period headers for TSLA (and another issuer once ready).
+4. Re-run the CLI on TSLA and capture a workbook diff against `Financial_Report.xlsx` for validation.

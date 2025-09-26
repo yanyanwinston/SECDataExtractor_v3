@@ -191,6 +191,8 @@ class StatementRow:
         return self.node.concept
 ```
 
+_Implementation note (2025-09-25)_: mainline code now filters statements via MetaLinks before extracting periods and applies per-statement period heuristics (balance sheet = two instants; other primaries = up to three durations). Consult `src/processor/data_parser.py` for the current implementation.
+
 ---
 
 ## PHASE 3: Presentation Parser Implementation
