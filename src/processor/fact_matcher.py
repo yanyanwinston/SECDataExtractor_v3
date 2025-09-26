@@ -7,9 +7,14 @@ nodes, creating complete statement tables ready for Excel generation.
 
 import logging
 import math
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from .presentation_models import PresentationStatement, StatementTable, StatementRow
+from .presentation_models import (
+    PresentationNode,
+    PresentationStatement,
+    StatementRow,
+    StatementTable,
+)
 from .data_models import Period, Cell
 
 logger = logging.getLogger(__name__)
@@ -43,8 +48,27 @@ class FactMatcher:
 
         rows = []
 
+        # Track display depth per structural level so we can collapse axis/table/domain nodes
+        display_depth_by_level: Dict[int, int] = {}
+
         # Flatten presentation tree to get all rows in presentation order
         for node, depth in statement.get_all_nodes_flat():
+            # Remove deeper levels when walking back up the tree
+            for level in list(display_depth_by_level.keys()):
+                if level >= depth:
+                    del display_depth_by_level[level]
+
+            parent_display_depth = display_depth_by_level.get(depth - 1, -1)
+
+            if self._is_structural_node(node):
+                # Propagate parent display depth so descendants keep indentation stable
+                display_depth_by_level[depth] = parent_display_depth
+                continue
+
+            display_depth = max(parent_display_depth + 1, 0)
+            node.depth = display_depth
+            display_depth_by_level[depth] = display_depth
+
             # Find facts for this concept across all periods
             cells = {}
 
@@ -76,6 +100,27 @@ class FactMatcher:
             periods=periods,
             rows=rows
         )
+
+    @staticmethod
+    def _is_structural_node(node: PresentationNode) -> bool:
+        """Return True when the presentation node is purely structural.
+
+        Structural nodes represent tables, axes, domains, or members that the
+        HTML viewer exposes only as dimensional filters. They should not become
+        standalone rows in the generated workbook.
+        """
+
+        concept = node.concept or ""
+        if not concept:
+            return False
+
+        local_name = concept.split(':', 1)[-1]
+
+        if local_name == "StatementLineItems":
+            return True
+
+        structural_suffixes = ("Table", "Axis", "Domain", "Member")
+        return any(local_name.endswith(suffix) for suffix in structural_suffixes)
 
     def extract_periods_from_facts(
         self,

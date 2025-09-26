@@ -308,6 +308,96 @@ class TestFactMatcher:
         assert cell.raw_value == pytest.approx(0.1234)
         assert cell.value
 
+    def test_structural_nodes_trimmed_from_rows(self):
+        """Fact matcher should drop table/axis/domain/member containers."""
+        from src.processor.presentation_models import PresentationNode, PresentationStatement, StatementType
+
+        # Build a tiny tree: root -> table -> axis -> domain -> member -> line items -> data row
+        assets_node = PresentationNode(
+            concept='us-gaap:Assets',
+            label='Total assets',
+            order=5,
+            depth=5,
+            abstract=False,
+        )
+
+        line_items = PresentationNode(
+            concept='us-gaap:StatementLineItems',
+            label='Statement [Line Items]',
+            order=4,
+            depth=4,
+            abstract=False,
+            children=[assets_node],
+        )
+
+        member = PresentationNode(
+            concept='custom:SomeMember',
+            label='Some Member',
+            order=3,
+            depth=3,
+            abstract=False,
+            children=[line_items],
+        )
+
+        domain = PresentationNode(
+            concept='us-gaap:SomeDomain',
+            label='Some Domain',
+            order=2,
+            depth=2,
+            abstract=False,
+            children=[member],
+        )
+
+        axis = PresentationNode(
+            concept='us-gaap:SomeAxis',
+            label='Some Axis',
+            order=1,
+            depth=1,
+            abstract=False,
+            children=[domain],
+        )
+
+        table = PresentationNode(
+            concept='us-gaap:SomeTable',
+            label='Statement [Table]',
+            order=0,
+            depth=1,
+            abstract=False,
+            children=[axis],
+        )
+
+        root = PresentationNode(
+            concept='us-gaap:StatementOfFinancialPositionAbstract',
+            label='Statement of Financial Position',
+            order=0,
+            depth=0,
+            abstract=True,
+            children=[table],
+        )
+
+        statement = PresentationStatement(
+            role_uri='uri',
+            role_id='ns14',
+            statement_name='Consolidated Balance Sheets',
+            statement_type=StatementType.BALANCE_SHEET,
+            root_nodes=[root],
+        )
+
+        periods = [Period(label='FY24', end_date='2024-12-31', instant=True)]
+        table_result = self.fact_matcher.match_facts_to_statement(statement, {}, periods)
+
+        labels = [row.label for row in table_result.rows]
+
+        assert 'Statement [Table]' not in labels
+        assert 'Some Axis' not in labels
+        assert 'Some Domain' not in labels
+        assert 'Some Member' not in labels
+        assert 'Statement [Line Items]' not in labels
+        assert 'Total assets' in labels
+
+        assets_row = next(row for row in table_result.rows if row.label == 'Total assets')
+        assert assets_row.depth == 1  # Indented beneath the abstract root only
+
     def test_format_period_label(self):
         """Test period label formatting."""
         test_cases = [
