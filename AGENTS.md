@@ -1,42 +1,60 @@
 # Repository Guidelines
 
-## Architecture Snapshot
-- Pipeline: filing → Arelle viewer plugin → viewer JSON → presentation models → Excel.
-- Lean on `arelle-release`, `ixbrl-viewer`, and `openpyxl`; consume the viewer JSON directly instead of rebuilding statements from facts.
-- Follow the MVP discipline in `CLAUDE.md`: solve the immediate problem first, then refine.
+## Project Snapshot
+- SECDataExtractor v3 turns SEC iXBRL filings into Excel workbooks using a presentation-first pipeline.
+- Flow: filing source → Arelle viewer plugin → viewer JSON + MetaLinks → presentation models → fact matching → Excel.
+- Primary modules live under `src/processor/` (parsing, matching, Excel) and `src/sec_downloader/` (EDGAR search + download).
 
-## Project Structure & Ownership
-- `src/sec_downloader/` owns EDGAR networking; `src/processor/` owns presentation parsing, fact matching, and Excel output.
-- CLI entry points live at the repo root (`download_filings.py`, `render_viewer_to_xlsx.py`); keep new tools beside them.
-- Long-form docs are under `docs/` (see `11-refactor-spec-v3.1.md`), fixtures under `tests/fixtures/`, and scratch results in `downloads/`, `output/`, and `temp/`.
+## Entry Points
+- `download_filings.py` – search and download 10-K/10-Q filings (tickers, CIKs, or batch files).
+- `render_viewer_to_xlsx.py` – convert any iXBRL filing (URL, local HTML, ZIP) into an Excel workbook.
+- `download_and_render.py` – orchestrates download + render for portfolios, depositing workbooks in `output/`.
 
-## Build & Run Essentials
-- `./setup.sh` creates the venv, installs dependencies, and scaffolds working directories.
-- Activate with `source venv/bin/activate`; rerun `pip install -r requirements.txt` after dependency edits.
-- Fetch a sample filing via `python download_filings.py --ticker AAPL --form 10-K --count 1`.
-- Validate the pipeline with `python render_viewer_to_xlsx.py --filing downloads/<ticker>/<viewer>.json --out output/sample.xlsx`.
-- Test with `PYTHONPATH=. pytest`; narrow scope using `-k` filters when iterating.
+## Working Directories
+- `downloads/` – raw filings pulled from EDGAR.
+- `output/` – generated Excel files.
+- `temp/` – temporary artefacts preserved only when `--keep-temp` is passed.
 
-## Coding Style & Conventions
-- PEP 8, four-space indentation, rich type hints; dataclasses/enums stay `PascalCase`, everything else `snake_case`.
-- Keep helpers lightweight and purposeful—only add layers when the current path fails a concrete need.
-- Format with `black .`, lint via `flake8 src tests`, and run `mypy src` when typing surfaces new contracts.
+## Daily Commands
+```bash
+./setup.sh                        # bootstrap venv and install requirements
+source venv/bin/activate          # optional for local shells
+PYTHONPATH=. pytest               # run regression suite
+black . && flake8 src tests       # formatting + linting
+mypy src                          # type checks when contracts change
+```
+Run at least one live filing before shipping changes:
+```bash
+python download_filings.py --ticker TSLA --form 10-K --count 1
+python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out output/tsla.xlsx
+```
+
+## Coding Standards
+- PEP 8, four-space indentation, descriptive names, and rich type hints.
+- Dataclasses/enums use PascalCase; everything else stays snake_case.
+- Keep helpers lean and purposeful; prefer direct fixes before introducing new abstraction layers.
+- Value formatting defaults to millions and respects negative XBRL decimals; add new scaling paths only with clear justification.
 
 ## Testing & Validation
-- Mirror existing layout: `tests/test_<area>.py` plus shared payloads in `tests/fixtures/viewer_schema_samples.json`.
-- Extend regression coverage whenever presentation traversal, fact matching, or Excel layout changes; prefer parametrized cases.
-- `test_processor.py` remains a skipped manual harness—rely on the automated suite for CI.
+- `tests/test_presentation_parser.py` guards statement filtering, label handling, and MetaLinks metadata.
+- `tests/test_integration_presentation.py` covers the presentation-first pipeline.
+- `tests/test_excel_generator.py` asserts sheet layout, dimensional expansion/collapse, and scaling behaviour.
+- `test_processor.py` remains a manual harness (skipped by default).
 
-## Workflow & PRs
-- Commit subjects follow `type(scope): summary` (e.g., `feat(refactor): align fact matcher`), ≤72 chars, imperative mood.
-- PRs outline context, approach, and validation commands; attach viewer JSON snippets or Excel diffs when clarifying impact.
-- Before review, run `PYTHONPATH=. pytest`, `black`, `flake8`, plus anything specific to changed modules, and document config shifts in `docs/` or CLI help.
+## Documentation
+- Canonical docs live in `docs/`: `architecture.md`, `user-guide.md`, `cli-reference.md`, `developer-guide.md`.
+- Historical specs: `docs/11-refactor-spec-v3.1.md`, `SPEC.md`, `CLAUDE.md`.
+- Update README and the docs whenever behaviour changes; capture validation commands in PR summaries.
+
+## Release Checklist
+1. `PYTHONPATH=. pytest`
+2. `black .`, `flake8 src tests`, `mypy src`
+3. Run the TSLA end-to-end pipeline and compare headers against `Financial_Report.xlsx` once column polishing lands.
+4. Sweep representative 10-K/10-Q filings to confirm dimensional handling, scaling, and disclosures.
+5. Refresh documentation and note CLI additions or behaviour changes.
+6. Record commands + findings in the release notes before tagging.
 
 ## Current Status
-- Phases 1–2 shipped: viewer schema captured in `docs/11-refactor-spec-v3.1.md`; presentation models live in `src/processor/presentation_models.py`.
-- Phase 3 pipeline: `PresentationParser`, `FactMatcher`, and `DataParser` run the presentation-first path, applying the MetaLinks `groupType` filter so we keep the primary financial statements and drop disclosure-only roles, then pick periods per statement via `DocumentPeriodEndDate` fallbacks.
-- Phase 3.3–3.4 UX: CLI exposes `--label-style`, `--save-viewer-json`, and `--no-scale-hint`, plus dimensional toggles (`--dimension-breakdown` default, `--collapse-dimensions`); `FactMatcher` pulls label maps from `PresentationParser`, expands axis/member rows by default, and still applies XBRL scale hints only for negative decimals while `ValueFormatter` stays in millions.
-- Phase 4 prep: Excel generator consumes the new tables; column header polish (calendar-aware labels) and quarterly vs annual configuration remain open—compare the TSLA workbook against `Financial_Report.xlsx` once headers are fixed.
-- Cover metadata: `DataParser` now reads company name, form type, and dates from viewer `sourceReports` before falling back to legacy `facts` / `meta` blocks.
-- Regression status: updated suites in `tests/test_presentation_parser.py`, `tests/test_integration_presentation.py`, and `tests/test_excel_generator.py` cover statement filtering, label toggles, scaling, and dimension expansion/collapse; live filing sweep plus period header assertions still pending before release tagging.
-- Active work: TSLA end-to-end sweep now green after fixing submissions fallback, exhibit pruning, and quarterly period selection (prior columns restored); next up is broad regression pass plus docs/tests refresh before release tagging.
+- Presentation-first pipeline (Phase 3) is stable; TSLA regression run is green.
+- Outstanding polish: calendar-aware column headers and the broader regression sweep before release tagging.
+- MetaLinks `groupType` filter keeps primary statements by default; pass `--include-disclosures` to surface schedules and cover pages.
