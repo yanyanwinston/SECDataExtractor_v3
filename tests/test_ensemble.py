@@ -1,0 +1,127 @@
+"""Tests for multi-filing ensemble assembly."""
+
+from src.processor import (
+    Cell,
+    FilingSlice,
+    Period,
+    ProcessingResult,
+    Row,
+    Statement,
+    build_ensemble_result,
+)
+
+
+def _make_cell(period_label: str, raw_value: float) -> Cell:
+    return Cell(
+        value=str(raw_value),
+        raw_value=raw_value,
+        unit="usd",
+        decimals=-6,
+        period=period_label,
+    )
+
+
+def _make_row(label: str, concept: str, period_values: dict[str, float]) -> Row:
+    cells = {period: _make_cell(period, value) for period, value in period_values.items()}
+    return Row(
+        label=label,
+        concept=concept,
+        is_abstract=False,
+        depth=0,
+        cells=cells,
+    )
+
+
+def _make_statement(name: str, period_specs: list[tuple[str, str, bool]], rows: list[Row]) -> Statement:
+    periods = [Period(label=label, end_date=end_date, instant=instant) for label, end_date, instant in period_specs]
+    return Statement(name=name, short_name=name, periods=periods, rows=rows)
+
+
+def _make_result(statement: Statement, company: str, filing_date: str) -> ProcessingResult:
+    return ProcessingResult(
+        statements=[statement],
+        company_name=company,
+        filing_date=filing_date,
+        form_type="10-K",
+        success=True,
+    )
+
+
+def test_build_ensemble_result_selects_primary_periods():
+    anchor_statement = _make_statement(
+        "Income Statement",
+        [
+            ("FY2023", "2023-12-31", False),
+            ("FY2022", "2022-12-31", False),
+        ],
+        [
+            _make_row("Revenue", "us-gaap:Revenue", {"FY2023": 1000.0, "FY2022": 900.0}),
+            _make_row("Gross Profit", "us-gaap:GrossProfit", {"FY2023": 400.0, "FY2022": 350.0}),
+        ],
+    )
+    anchor_result = _make_result(anchor_statement, "Example Co", "2024-02-15")
+
+    prior_statement = _make_statement(
+        "Income Statement",
+        [
+            ("FY2022", "2022-12-31", False),
+            ("FY2021", "2021-12-31", False),
+        ],
+        [
+            _make_row("Revenue", "us-gaap:Revenue", {"FY2022": 900.0, "FY2021": 850.0}),
+            _make_row("Gross Profit", "us-gaap:GrossProfit", {"FY2022": 350.0, "FY2021": 320.0}),
+            _make_row("New Disclosure", "us-gaap:OtherIncome", {"FY2022": 42.0}),
+        ],
+    )
+    prior_result = _make_result(prior_statement, "Example Co", "2023-02-20")
+
+    slices = [
+        FilingSlice.from_processing_result("2024 filing", anchor_result),
+        FilingSlice.from_processing_result("2023 filing", prior_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+
+    assert len(ensemble.statements) == 1
+    combined_statement = ensemble.statements[0]
+
+    period_labels = [period.label for period in combined_statement.periods]
+    assert period_labels == ["FY2023", "FY2022"]
+
+    revenue_row = next(row for row in combined_statement.rows if row.label == "Revenue")
+    assert revenue_row.cells["FY2023"].raw_value == 1000.0
+    assert revenue_row.cells["FY2022"].raw_value == 900.0
+    assert "FY2021" not in revenue_row.cells  # Prior filing extra period is ignored
+
+    extra_row = next(row for row in combined_statement.rows if row.label == "New Disclosure")
+    assert "FY2023" not in extra_row.cells
+    assert extra_row.cells["FY2022"].raw_value == 42.0
+
+
+def test_build_ensemble_result_warns_when_statement_missing():
+    anchor_statement = _make_statement(
+        "Balance Sheet",
+        [("FY2023", "2023-12-31", True)],
+        [_make_row("Cash", "us-gaap:Cash", {"FY2023": 50.0})],
+    )
+    anchor_result = _make_result(anchor_statement, "Example Co", "2024-03-15")
+
+    missing_result = ProcessingResult(
+        statements=[],
+        company_name="Example Co",
+        filing_date="2023-03-20",
+        form_type="10-K",
+        success=True,
+    )
+
+    slices = [
+        FilingSlice.from_processing_result("2024 filing", anchor_result),
+        FilingSlice.from_processing_result("2023 filing", missing_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+
+    assert len(ensemble.statements[0].periods) == 2
+
+    warnings = ensemble.warnings or []
+    assert any("missing" in warning.lower() for warning in warnings)

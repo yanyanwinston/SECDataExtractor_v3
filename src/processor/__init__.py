@@ -22,6 +22,7 @@ from .fact_matcher import FactMatcher
 from .data_parser import DataParser
 from .value_formatter import ValueFormatter
 from .excel_generator import ExcelGenerator
+from .ensemble import FilingSlice, build_ensemble_result
 
 __all__ = [
     "InputHandler",
@@ -44,4 +45,6 @@ __all__ = [
     "DataParser",
     "ValueFormatter",
     "ExcelGenerator",
+    "FilingSlice",
+    "build_ensemble_result",
 ]

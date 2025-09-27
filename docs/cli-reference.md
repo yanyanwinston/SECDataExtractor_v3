@@ -1,9 +1,9 @@
 # CLI Reference
 
-This reference covers the three supported entry points: `download_filings.py`,
-`render_viewer_to_xlsx.py`, and `download_and_render.py`. Each script supports
-`--help` for inline documentation; the tables below highlight the arguments that
-impact behaviour most.
+This reference covers the supported entry points: `download_filings.py`,
+`render_viewer_to_xlsx.py`, `download_and_render.py`, and `ensemble_to_xlsx.py`.
+Each script supports `--help` for inline documentation; the tables below
+highlight the arguments that impact behaviour most.
 
 ## download_filings.py
 Download 10-K/10-Q filings from EDGAR.
@@ -85,6 +85,31 @@ python download_and_render.py [--ticker TSLA --ticker NFLX | --cik 0001318605] \
   are skipped.
 - `--dump-role-map` and `--save-viewer-json` operate per filing—results are stored
   alongside each Excel workbook.
+
+## ensemble_to_xlsx.py
+Create a single workbook that stitches multiple filings together column-by-column.
+
+### Usage
+```bash
+python ensemble_to_xlsx.py --ticker TSLA --form 10-K --count 5 --out output/TSLA-ensemble.xlsx \
+  [--include-amendments] [--download-dir downloads] [--max-parallel 2] \
+  [--download-timeout 30] [--retries 3] [--currency USD] [--scale-none] \
+  [--collapse-dimensions] [--include-disclosures] [--label-style terse] \
+  [--no-scale-hint] [--timeout 300] [--temp-dir tmp] [--keep-temp] [--verbose]
+```
+
+### Notable options
+- `--ticker`/`--cik` – choose a single identifier; the newest filing becomes the
+  anchor that defines row ordering and labels.
+- `--form` & `--count` – limit the form type (default `10-K`) and the number of
+  filings to combine. Pass `--include-amendments` to allow `/A` variants.
+- `--download-dir`, `--max-parallel`, `--download-timeout`, `--retries` – mirror the
+  downloader controls for where and how filings are fetched.
+- `--scale-none`, `--no-scale-hint`, `--collapse-dimensions`, `--include-disclosures`,
+  `--label-style` – forwarded to the presentation-first parser so the ensemble
+  matches single-filing workbooks.
+- `--timeout`, `--temp-dir`, `--keep-temp` – manage Arelle execution and cleanup.
+- Output workbook columns are sorted newest → oldest with one period per filing.
 
 ## Logging & environment tips
 - Combine `--verbose` with `--keep-temp` during debugging to retain Arelle artefacts.
