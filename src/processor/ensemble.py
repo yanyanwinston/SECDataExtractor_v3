@@ -75,11 +75,13 @@ def _canonical_row_key(row: Row) -> Tuple:
     if presentation_node is not None:
         preferred_role = getattr(presentation_node, "preferred_label_role", None)
         order = getattr(presentation_node, "order", None)
-        ancestors = getattr(presentation_node, "_ancestors", None)
-        if ancestors:
-            parent_path = tuple(_normalise_concept(node.concept) for node in ancestors)
+
+    parent_path = _parent_path(row)
 
     concept = (row.concept or "").lower()
+    signature = getattr(row, "dimension_signature", None)
+    if signature is not None:
+        signature = tuple(signature)
 
     return (
         concept,
@@ -90,6 +92,7 @@ def _canonical_row_key(row: Row) -> Tuple:
         preferred_role,
         order,
         parent_path,
+        signature,
     )
 
 
@@ -103,6 +106,7 @@ def _clone_row_structure(row: Row) -> Row:
         depth=row.depth,
         cells={},
         presentation_node=getattr(row, "presentation_node", None),
+        dimension_signature=row.dimension_signature,
     )
 
 
@@ -125,8 +129,49 @@ def _label_token(value: Optional[str]) -> str:
     return (value or "").strip().lower()
 
 
+def _normalise_signature(
+    signature: Optional[Iterable[Tuple[str, str]]]
+) -> Optional[Tuple[Tuple[str, str], ...]]:
+    if signature is None:
+        return None
+
+    if isinstance(signature, tuple):
+        return signature
+
+    try:
+        return tuple(signature)
+    except TypeError:
+        return None
+
+
+def _parent_path(row: Row) -> Optional[Tuple[str, ...]]:
+    presentation_node = getattr(row, "presentation_node", None)
+    if presentation_node is None:
+        return None
+
+    ancestors = getattr(presentation_node, "_ancestors", None)
+    if not ancestors:
+        return None
+
+    return tuple(_normalise_concept(node.concept) for node in ancestors)
+
+
 def _rows_match(anchor: Row, candidate: Row) -> bool:
     """Determine whether two rows should be considered equivalent."""
+
+    anchor_signature = _normalise_signature(getattr(anchor, "dimension_signature", None))
+    candidate_signature = _normalise_signature(getattr(candidate, "dimension_signature", None))
+
+    if anchor_signature is not None or candidate_signature is not None:
+        if anchor_signature != candidate_signature:
+            return False
+
+    anchor_parent_path = _parent_path(anchor)
+    candidate_parent_path = _parent_path(candidate)
+
+    if anchor_parent_path is not None or candidate_parent_path is not None:
+        if anchor_parent_path != candidate_parent_path:
+            return False
 
     anchor_concept = (anchor.concept or "").lower()
     candidate_concept = (candidate.concept or "").lower()

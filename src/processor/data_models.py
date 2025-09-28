@@ -3,7 +3,7 @@ Data models for SEC filing processing.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -36,6 +36,7 @@ class Row:
     depth: int
     cells: Dict[str, Cell]  # period_label -> Cell
     presentation_node: Optional[Any] = None
+    dimension_signature: Optional[Tuple[Tuple[str, str], ...]] = None
 
 
 @dataclass

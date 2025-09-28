@@ -117,12 +117,24 @@ class FactMatcher:
 
         if not concept:
             clone = self._clone_node(node, depth=display_depth)
-            return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+            return [
+                StatementRow(
+                    node=clone,
+                    cells=self._build_empty_cells(periods),
+                    dimension_signature=None,
+                )
+            ]
 
         if not self.expand_dimensions:
             clone = self._clone_node(node, depth=display_depth)
             cells = self._build_cells_without_dimensions(concept, periods, facts)
-            return [StatementRow(node=clone, cells=cells)]
+            return [
+                StatementRow(
+                    node=clone,
+                    cells=cells,
+                    dimension_signature=(),
+                )
+            ]
 
         fact_groups = self._group_facts_by_dimensions(
             concept,
@@ -133,7 +145,13 @@ class FactMatcher:
 
         if not fact_groups:
             clone = self._clone_node(node, depth=display_depth)
-            return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+            return [
+                StatementRow(
+                    node=clone,
+                    cells=self._build_empty_cells(periods),
+                    dimension_signature=(),
+                )
+            ]
 
         # Sort: base row (no dimensions) first, then remaining dimension combinations.
         sorted_keys = sorted(
@@ -175,12 +193,23 @@ class FactMatcher:
             if all(cell.raw_value is None for cell in cells.values()):
                 continue
 
-            generated_rows.append(StatementRow(node=clone, cells=cells))
+            dimension_signature = self._derive_dimension_signature(
+                group["contexts"], dims_key
+            )
+
+            generated_rows.append(
+                StatementRow(
+                    node=clone,
+                    cells=cells,
+                    dimension_signature=dimension_signature,
+                )
+            )
 
         return generated_rows or [
             StatementRow(
                 node=self._clone_node(node, depth=display_depth),
                 cells=self._build_empty_cells(periods),
+                dimension_signature=(),
             )
         ]
 
@@ -210,6 +239,49 @@ class FactMatcher:
             group["contexts"].append(context)
 
         return groups
+
+    def _derive_dimension_signature(
+        self,
+        contexts: List[dict],
+        fallback_dims_key: Tuple[Tuple[str, str], ...],
+    ) -> Tuple[Tuple[str, str], ...]:
+        """Return an unsanitised axis/member signature for the group."""
+
+        if contexts:
+            sample = contexts[0]
+            dims = sample.get("dims") or {}
+            if isinstance(dims, dict):
+                signature = tuple(
+                    sorted(
+                        (
+                            self._normalise_dimension_axis(axis),
+                            self._normalise_dimension_member(member),
+                        )
+                        for axis, member in dims.items()
+                    )
+                )
+                if signature:
+                    return signature
+
+        return tuple(
+            (
+                self._normalise_dimension_axis(axis),
+                self._normalise_dimension_member(member),
+            )
+            for axis, member in fallback_dims_key
+        )
+
+    @staticmethod
+    def _normalise_dimension_axis(axis: str) -> str:
+        if not axis:
+            return ""
+        return axis.split(":", 1)[-1].lower()
+
+    @staticmethod
+    def _normalise_dimension_member(member: str) -> str:
+        if not member:
+            return ""
+        return member.split(":", 1)[-1].lower()
 
     def _extract_fact_contexts(self, concept: str, facts: dict) -> List[dict]:
         """Extract all contexts for a concept, including dimensional metadata."""

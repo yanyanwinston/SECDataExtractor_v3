@@ -731,6 +731,7 @@ class DataParser:
                     is_abstract=stmt_row.node.abstract,
                     depth=stmt_row.node.depth,
                     cells=dict(stmt_row.cells),
+                    dimension_signature=stmt_row.dimension_signature,
                 )
 
                 # Preserve presentation metadata for Excel generator enhancements

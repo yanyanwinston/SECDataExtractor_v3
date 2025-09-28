@@ -21,7 +21,13 @@ def _make_cell(period_label: str, raw_value: float) -> Cell:
     )
 
 
-def _make_row(label: str, concept: str, period_values: dict[str, float]) -> Row:
+def _make_row(
+    label: str,
+    concept: str,
+    period_values: dict[str, float],
+    *,
+    dimension_signature: tuple[tuple[str, str], ...] | None = None,
+) -> Row:
     cells = {period: _make_cell(period, value) for period, value in period_values.items()}
     return Row(
         label=label,
@@ -29,6 +35,7 @@ def _make_row(label: str, concept: str, period_values: dict[str, float]) -> Row:
         is_abstract=False,
         depth=0,
         cells=cells,
+        dimension_signature=dimension_signature,
     )
 
 
@@ -163,3 +170,72 @@ def test_rows_align_when_concept_namespace_changes():
     combined_statement = ensemble.statements[0]
     row = next(r for r in combined_statement.rows if r.label == "Digital assets, net")
     assert set(row.cells.keys()) == {"Dec 31, 2024", "Dec 31, 2023"}
+
+
+def test_dimension_signature_prevents_cross_context_alignment():
+    balance_signature = (
+        ("propertyplantandequipmentbytypeaxis", "operatingleasevehiclesmember"),
+    )
+    disclosure_signature = (
+        ("guaranteeobligationsbynatureaxis", "salestoleasingcompanieswithguaranteemember"),
+    )
+
+    anchor_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2024", "2024-12-31", True)],
+        [
+            _make_row(
+                "Operating Lease Vehicles",
+                "us-gaap:DeferredCostsLeasingNetNoncurrent",
+                {"Dec 31, 2024": 4123.0},
+                dimension_signature=balance_signature,
+            )
+        ],
+    )
+    anchor_result = _make_result(anchor_statement, "Tesla, Inc.", "2025-02-05")
+
+    prior_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2023", "2023-12-31", True)],
+        [
+            _make_row(
+                "Operating Lease Vehicles",
+                "us-gaap:DeferredCostsLeasingNetNoncurrent",
+                {"Dec 31, 2023": 43.0},
+                dimension_signature=disclosure_signature,
+            ),
+            _make_row(
+                "Operating Lease Vehicles",
+                "us-gaap:DeferredCostsLeasingNetNoncurrent",
+                {"Dec 31, 2023": 3091.0},
+                dimension_signature=balance_signature,
+            ),
+        ],
+    )
+    prior_result = _make_result(prior_statement, "Tesla, Inc.", "2024-02-10")
+
+    slices = [
+        FilingSlice.from_processing_result("2024 filing", anchor_result),
+        FilingSlice.from_processing_result("2023 filing", prior_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+    combined_statement = ensemble.statements[0]
+
+    matched_row = next(
+        row
+        for row in combined_statement.rows
+        if row.label == "Operating Lease Vehicles"
+        and row.dimension_signature == balance_signature
+    )
+    assert {
+        period: cell.raw_value for period, cell in matched_row.cells.items()
+    } == {"Dec 31, 2024": 4123.0, "Dec 31, 2023": 3091.0}
+
+    extra_row = next(
+        row
+        for row in combined_statement.rows
+        if row.label == "Operating Lease Vehicles"
+        and row.dimension_signature == disclosure_signature
+    )
+    assert extra_row.cells["Dec 31, 2023"].raw_value == 43.0

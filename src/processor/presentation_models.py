@@ -6,7 +6,7 @@ enabling exact visual fidelity with the original filing presentation.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
 # Import existing data models for compatibility
@@ -141,6 +141,7 @@ class StatementRow:
 
     node: PresentationNode  # Presentation information
     cells: Dict[str, Cell] = field(default_factory=dict)  # period_id -> Cell
+    dimension_signature: Optional[Tuple[Tuple[str, str], ...]] = None
 
     # Properties for compatibility with existing Excel generator
     @property
