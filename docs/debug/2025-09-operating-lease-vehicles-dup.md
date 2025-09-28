@@ -17,6 +17,8 @@
 ## Diagnosis
 The ensemble alignment collapses distinct dimensional contexts for the same concept/label. Because `_rows_match` does not consider presentation role or axis members, any filing that publishes the same concept in both the primary statement and a disclosure will populate the anchor slot with whichever instance appears first, while the correct statement row is relegated to the leftovers list. For Tesla's Dec 31, 2020 data this misroutes the Resale Value Guarantee disclosure total ($43M) into the Balance Sheet and leaves the actual balance sheet amount ($3,091M) on a duplicate row.
 
-## Next steps to consider
-- extend row matching to include presentation role / ancestor chain (already stored in `_canonical_row_key`) or dimension signatures so disclosure contexts cannot satisfy a primary statement match;
-- alternatively, filter statement rows to the role that matches the anchor before alignment, ensuring note-only contexts never participate in balance sheet aggregation.
+## Remediation plan
+- Capture a dimension signature for every row when we expand facts by axis members in `FactMatcher`. Store the unsanitised axis→member tuple beside the cloned `PresentationNode` so it flows into the legacy `Row` objects even when the axis is not part of the presentation tree.
+- Thread that signature (and the presentation ancestor path we already compute) through `_canonical_row_key` and require equality in `_rows_match` whenever both sides expose it. Keep the current concept/label fallback only when neither row carries signature metadata.
+- Add targeted coverage that builds a mini ensemble with two rows sharing the same concept but different dimension signatures to confirm the disclosure row stays in the leftovers list. The test should fail on main, then pass once the matcher and alignment changes ship.
+- Re-run the TSLA 2020/2024 ensemble after the code change to confirm the balance sheet slot holds `$3,091M` while the guarantee disclosure lives in the extras section, and update the regression artefact screenshots if applicable.
