@@ -175,13 +175,16 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
 
     anchor_concept = (anchor.concept or "").lower()
     candidate_concept = (candidate.concept or "").lower()
+    anchor_label = _label_token(anchor.label)
+    candidate_label = _label_token(candidate.label)
+    anchor_normalised = _normalise_concept(anchor.concept)
+    candidate_normalised = _normalise_concept(candidate.concept)
 
     if anchor_concept and candidate_concept and anchor_concept == candidate_concept:
         return True
 
     if (
-        _normalise_concept(anchor.concept) == _normalise_concept(candidate.concept)
-        and _label_token(anchor.label) == _label_token(candidate.label)
+        anchor_normalised == candidate_normalised
         and anchor.depth == candidate.depth
         and anchor.is_abstract == candidate.is_abstract
     ):
@@ -190,7 +193,17 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
         anchor_order = getattr(anchor_node, "order", None)
         candidate_order = getattr(candidate_node, "order", None)
         if anchor_order is None or candidate_order is None or anchor_order == candidate_order:
-            return True
+            if anchor_label == candidate_label:
+                return True
+
+            if anchor_normalised:
+                logger.debug(
+                    "Row alignment fallback on concept '%s' despite label mismatch '%s' vs '%s'",
+                    anchor_normalised,
+                    anchor_label,
+                    candidate_label,
+                )
+                return True
 
     return False
 

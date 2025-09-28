@@ -172,6 +172,50 @@ def test_rows_align_when_concept_namespace_changes():
     assert set(row.cells.keys()) == {"Dec 31, 2024", "Dec 31, 2023"}
 
 
+def test_rows_align_when_labels_drift_but_concept_matches():
+    anchor_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2024", "2024-12-31", True)],
+        [
+            _make_row(
+                "Solar energy systems, net",
+                "ns0:LeasedAssetsNet",
+                {"Dec 31, 2024": 4924.0},
+            )
+        ],
+    )
+    anchor_result = _make_result(anchor_statement, "Example Co", "2025-01-29")
+
+    prior_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2023", "2023-12-31", True)],
+        [
+            _make_row(
+                "Solar Energy Systems",
+                "tsla:LeasedAssetsNet",
+                {"Dec 31, 2023": 5229.0},
+            )
+        ],
+    )
+    prior_result = _make_result(prior_statement, "Example Co", "2024-01-25")
+
+    slices = [
+        FilingSlice.from_processing_result("2024 filing", anchor_result),
+        FilingSlice.from_processing_result("2023 filing", prior_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+    combined_statement = ensemble.statements[0]
+
+    solar_rows = [row for row in combined_statement.rows if "solar" in (row.label or "").lower()]
+    assert [row.label for row in solar_rows] == ["Solar energy systems, net"]
+
+    solar_row = solar_rows[0]
+    assert {
+        period: cell.raw_value for period, cell in solar_row.cells.items()
+    } == {"Dec 31, 2024": 4924.0, "Dec 31, 2023": 5229.0}
+
+
 def test_dimension_signature_prevents_cross_context_alignment():
     balance_signature = (
         ("propertyplantandequipmentbytypeaxis", "operatingleasevehiclesmember"),
