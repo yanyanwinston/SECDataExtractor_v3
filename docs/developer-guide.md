@@ -26,6 +26,11 @@ setup, project layout, validation steps, and the release checklist.
 - `docs/` – long-form documentation (this file, architecture, user guide, CLI)
 - `downloads/`, `output/`, `temp/` – working directories created by CLIs
 
+## Onboarding checklist
+- Read `docs/inline-viewer-pipeline.md` to understand how Arelle emits
+  `ixbrl-viewer.htm`, how we prioritise MetaLinks sources, and where to inspect
+  temp artifacts during triage.
+
 ## Coding conventions
 - Follow PEP 8 with four-space indentation, descriptive names, and rich type hints.
 - Dataclasses and enums use PascalCase; everything else sticks to snake_case.

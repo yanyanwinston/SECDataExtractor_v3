@@ -145,13 +145,16 @@ class ViewerDataExtractor:
 
             try:
                 with candidate.open("r", encoding="utf-8") as fp:
-                    logger.debug("Loaded MetaLinks from %s", candidate)
+                    logger.info("Using MetaLinks from %s", candidate)
                     return json.load(fp)
             except Exception as exc:
                 logger.warning(
                     "Failed to parse MetaLinks.json at %s: %s", candidate, exc
                 )
-
+        logger.info(
+            "No MetaLinks companion found for %s; using viewer JSON alone",
+            html_file.name,
+        )
         return None
 
     def _build_role_map(
