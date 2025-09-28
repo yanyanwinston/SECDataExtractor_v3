@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import tempfile
@@ -91,6 +92,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=Path,
         default=Path("./downloads"),
         help="Directory to store downloaded filings (default: ./downloads)",
+    )
+    parser.add_argument(
+        "--no-download",
+        action="store_true",
+        help="Reuse previously downloaded filings in --download-dir instead of contacting EDGAR",
     )
     parser.add_argument(
         "--max-parallel",
@@ -226,6 +232,63 @@ def download_filings(
 
     downloader = FilingDownload(edgar_client)
     return downloader.download_filings(list(filings), config, show_progress=True)
+
+
+def build_existing_results(
+    filings: Iterable[Filing],
+    download_dir: Path,
+) -> List[DownloadResult]:
+    """Construct DownloadResult objects for filings already present on disk."""
+
+    config = DownloadConfig(output_dir=download_dir, create_subdirs=True)
+    results: List[DownloadResult] = []
+
+    for filing in filings:
+        filing_dir = config.get_filing_dir(filing)
+        if not filing_dir.exists():
+            logger.error(
+                "Expected filing directory missing for %s (%s)",
+                filing.display_name,
+                filing_dir,
+            )
+            continue
+
+        metadata_path = filing_dir / "metadata.json"
+        if metadata_path.exists():
+            try:
+                with metadata_path.open("r", encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+                primary_document = metadata.get("filing_info", {}).get("primary_document")
+                if primary_document:
+                    filing.primary_document = primary_document
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning(
+                    "Failed to read metadata for %s: %s",
+                    filing.display_name,
+                    exc,
+                )
+
+        if not filing.primary_document:
+            html_candidates = sorted(filing_dir.glob("*.htm")) + sorted(
+                filing_dir.glob("*.html")
+            )
+            if html_candidates:
+                filing.primary_document = html_candidates[0].name
+
+        downloaded_files = [str(path) for path in filing_dir.iterdir() if path.is_file()]
+
+        results.append(
+            DownloadResult(
+                filing=filing,
+                success=True,
+                local_path=filing_dir,
+                error=None,
+                downloaded_files=downloaded_files,
+                metadata_path=metadata_path if metadata_path.exists() else None,
+            )
+        )
+
+    return results
 
 
 def gather_meta_links(result: DownloadResult) -> List[Path]:
@@ -403,14 +466,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     logger.info("Selected %d filing(s) for %s", len(filings), identifier)
 
-    download_results = download_filings(
-        filings,
-        args.download_dir,
-        args.max_parallel,
-        args.download_timeout,
-        args.retries,
-        edgar_client,
-    )
+    if args.no_download:
+        download_results = build_existing_results(filings, args.download_dir)
+    else:
+        download_results = download_filings(
+            filings,
+            args.download_dir,
+            args.max_parallel,
+            args.download_timeout,
+            args.retries,
+            edgar_client,
+        )
 
     options = PipelineOptions(
         currency=args.currency,
@@ -445,4 +511,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

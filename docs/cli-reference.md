@@ -92,7 +92,7 @@ Create a single workbook that stitches multiple filings together column-by-colum
 ### Usage
 ```bash
 python ensemble_to_xlsx.py --ticker TSLA --form 10-K --count 5 --out output/TSLA-ensemble.xlsx \
-  [--include-amendments] [--download-dir downloads] [--max-parallel 2] \
+  [--include-amendments] [--download-dir downloads] [--no-download] [--max-parallel 2] \
   [--download-timeout 30] [--retries 3] [--currency USD] [--scale-none] \
   [--collapse-dimensions] [--include-disclosures] [--label-style terse] \
   [--no-scale-hint] [--timeout 300] [--temp-dir tmp] [--keep-temp] [--verbose]
@@ -105,6 +105,9 @@ python ensemble_to_xlsx.py --ticker TSLA --form 10-K --count 5 --out output/TSLA
   filings to combine. Pass `--include-amendments` to allow `/A` variants.
 - `--download-dir`, `--max-parallel`, `--download-timeout`, `--retries` – mirror the
   downloader controls for where and how filings are fetched.
+- `--no-download` tells the tool to reuse filings already present under
+  `--download-dir` (expects prior runs of `download_filings.py` or
+  `download_and_render.py`).
 - `--scale-none`, `--no-scale-hint`, `--collapse-dimensions`, `--include-disclosures`,
   `--label-style` – forwarded to the presentation-first parser so the ensemble
   matches single-filing workbooks.
