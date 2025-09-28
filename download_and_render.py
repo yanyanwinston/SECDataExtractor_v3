@@ -72,8 +72,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--q-count",
         type=int,
-        default=10,
-        help="Number of 10-Q filings to download (default: 10)",
+        default=0,
+        help="Number of 10-Q filings to download (default: 0)",
     )
     parser.add_argument(
         "--include-amendments", action="store_true", help="Include /A amendment filings"

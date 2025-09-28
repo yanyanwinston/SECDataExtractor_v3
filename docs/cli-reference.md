@@ -77,7 +77,7 @@ python download_and_render.py [--ticker TSLA --ticker NFLX | --cik 0001318605] \
 - `--ticker/--cik/--input-file` mirror the downloader; arguments can repeat to build
   a portfolio.
 - `--k-count` & `--q-count` define how many annual vs quarterly filings to fetch per
-  identifier.
+  identifier. `--q-count` now defaults to 0, so opt-in when you need 10-Q workbooks.
 - `--download-dir` and `--excel-dir` let you separate raw filings from Excel output.
 - Rendering flags (label style, dimensional behaviour, disclosures, period filters,
   scaling) are passed directly to the renderer.
