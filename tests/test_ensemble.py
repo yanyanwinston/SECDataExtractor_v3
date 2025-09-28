@@ -125,3 +125,41 @@ def test_build_ensemble_result_warns_when_statement_missing():
 
     warnings = ensemble.warnings or []
     assert any("missing" in warning.lower() for warning in warnings)
+
+
+def test_rows_align_when_concept_namespace_changes():
+    anchor_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2024", "2024-12-31", True), ("Dec 31, 2023", "2023-12-31", True)],
+        [
+            _make_row(
+                "Digital assets, net",
+                "ns0:DigitalAssetsNetNonCurrent",
+                {"Dec 31, 2024": 120.0, "Dec 31, 2023": 110.0},
+            )
+        ],
+    )
+    anchor_result = _make_result(anchor_statement, "Example Co", "2025-02-01")
+
+    prior_statement = _make_statement(
+        "Balance Sheet",
+        [("Dec 31, 2023", "2023-12-31", True), ("Dec 31, 2022", "2022-12-31", True)],
+        [
+            _make_row(
+                "Digital assets, net",
+                "tsla:DigitalAssetsNetNonCurrent",
+                {"Dec 31, 2023": 110.0, "Dec 31, 2022": 90.0},
+            )
+        ],
+    )
+    prior_result = _make_result(prior_statement, "Example Co", "2024-02-01")
+
+    slices = [
+        FilingSlice.from_processing_result("2025 filing", anchor_result),
+        FilingSlice.from_processing_result("2024 filing", prior_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+    combined_statement = ensemble.statements[0]
+    row = next(r for r in combined_statement.rows if r.label == "Digital assets, net")
+    assert set(row.cells.keys()) == {"Dec 31, 2024", "Dec 31, 2023"}

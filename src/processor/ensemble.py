@@ -44,7 +44,24 @@ def _safe_parse_date(value: Optional[str]) -> datetime:
 def _canonical_statement_key(statement: Statement) -> str:
     """Build a lookup key for a statement consistent across filings."""
 
-    return (statement.short_name or statement.name or "").strip().lower()
+    name_token = (statement.name or "").strip().lower()
+    if " - " in name_token:
+        _, _, tail = name_token.partition(" - ")
+        if tail:
+            name_token = tail
+
+    if not name_token:
+        name_token = (statement.short_name or "").strip().lower()
+
+    return name_token
+
+
+def _normalise_concept(concept: Optional[str]) -> str:
+    """Normalise a concept QName to a namespace-agnostic token."""
+
+    if not concept:
+        return ""
+    return concept.split(":", 1)[-1].lower()
 
 
 def _canonical_row_key(row: Row) -> Tuple:
@@ -53,18 +70,26 @@ def _canonical_row_key(row: Row) -> Tuple:
     presentation_node = getattr(row, "presentation_node", None)
     preferred_role = None
     order = None
+    parent_path = None
 
     if presentation_node is not None:
         preferred_role = getattr(presentation_node, "preferred_label_role", None)
         order = getattr(presentation_node, "order", None)
+        ancestors = getattr(presentation_node, "_ancestors", None)
+        if ancestors:
+            parent_path = tuple(_normalise_concept(node.concept) for node in ancestors)
+
+    concept = (row.concept or "").lower()
 
     return (
-        (row.concept or "").lower(),
+        concept,
+        _normalise_concept(row.concept),
         (row.label or "").strip().lower(),
         row.depth,
         row.is_abstract,
         preferred_role,
         order,
+        parent_path,
     )
 
 
@@ -96,30 +121,57 @@ def _clone_cell(cell: Optional[Cell], period_label: str) -> Optional[Cell]:
     )
 
 
+def _label_token(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def _rows_match(anchor: Row, candidate: Row) -> bool:
+    """Determine whether two rows should be considered equivalent."""
+
+    anchor_concept = (anchor.concept or "").lower()
+    candidate_concept = (candidate.concept or "").lower()
+
+    if anchor_concept and candidate_concept and anchor_concept == candidate_concept:
+        return True
+
+    if (
+        _normalise_concept(anchor.concept) == _normalise_concept(candidate.concept)
+        and _label_token(anchor.label) == _label_token(candidate.label)
+        and anchor.depth == candidate.depth
+        and anchor.is_abstract == candidate.is_abstract
+    ):
+        anchor_node = getattr(anchor, "presentation_node", None)
+        candidate_node = getattr(candidate, "presentation_node", None)
+        anchor_order = getattr(anchor_node, "order", None)
+        candidate_order = getattr(candidate_node, "order", None)
+        if anchor_order is None or candidate_order is None or anchor_order == candidate_order:
+            return True
+
+    return False
+
+
 def _map_rows(
     anchor_rows: Sequence[Row],
     candidate_rows: Sequence[Row],
 ) -> Tuple[List[Optional[Row]], List[Row]]:
     """Align candidate rows against the anchor skeleton."""
 
-    bucket: Dict[Tuple, List[Row]] = defaultdict(list)
-
-    for row in candidate_rows:
-        bucket[_canonical_row_key(row)].append(row)
-
+    remaining = list(candidate_rows)
     matched: List[Optional[Row]] = []
 
     for anchor_row in anchor_rows:
-        key = _canonical_row_key(anchor_row)
-        rows = bucket.get(key)
-        if rows:
-            matched.append(rows.pop(0))
-        else:
-            matched.append(None)
+        match_index: Optional[int] = None
+        for idx, candidate in enumerate(remaining):
+            if _rows_match(anchor_row, candidate):
+                match_index = idx
+                break
 
-    leftovers: List[Row] = []
-    for remaining in bucket.values():
-        leftovers.extend(remaining)
+        if match_index is None:
+            matched.append(None)
+        else:
+            matched.append(remaining.pop(match_index))
+
+    leftovers: List[Row] = list(remaining)
 
     return matched, leftovers
 
@@ -320,10 +372,8 @@ def _extract_cell(row: Row, period_label: str) -> Optional[Cell]:
 def _find_statement(statements: Sequence[Statement], key: str) -> Optional[Statement]:
     """Locate a statement matching the given key."""
 
-    key = key.strip().lower()
     for statement in statements:
-        candidate_key = _canonical_statement_key(statement)
-        if candidate_key == key:
+        if _canonical_statement_key(statement) == key:
             return statement
     return None
 
