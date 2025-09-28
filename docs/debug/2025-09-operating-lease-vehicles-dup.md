@@ -17,8 +17,11 @@
 ## Diagnosis
 The ensemble alignment collapses distinct dimensional contexts for the same concept/label. Because `_rows_match` does not consider presentation role or axis members, any filing that publishes the same concept in both the primary statement and a disclosure will populate the anchor slot with whichever instance appears first, while the correct statement row is relegated to the leftovers list. For Tesla's Dec 31, 2020 data this misroutes the Resale Value Guarantee disclosure total ($43M) into the Balance Sheet and leaves the actual balance sheet amount ($3,091M) on a duplicate row.
 
-## Remediation plan
-- Capture a dimension signature for every row when we expand facts by axis members in `FactMatcher`. Store the unsanitised axis→member tuple beside the cloned `PresentationNode` so it flows into the legacy `Row` objects even when the axis is not part of the presentation tree.
-- Thread that signature (and the presentation ancestor path we already compute) through `_canonical_row_key` and require equality in `_rows_match` whenever both sides expose it. Keep the current concept/label fallback only when neither row carries signature metadata.
-- Add targeted coverage that builds a mini ensemble with two rows sharing the same concept but different dimension signatures to confirm the disclosure row stays in the leftovers list. The test should fail on main, then pass once the matcher and alignment changes ship.
-- Re-run the TSLA 2020/2024 ensemble after the code change to confirm the balance sheet slot holds `$3,091M` while the guarantee disclosure lives in the extras section, and update the regression artefact screenshots if applicable.
+## Fix status (2025-09-28)
+- Introduced `dimension_signature` propagation in `FactMatcher`: every generated row now carries a normalized (namespace-stripped, lower-cased) axis→member tuple derived from the underlying fact contexts. Disclosure-only contexts therefore remain distinguishable even when presentation trees omit the axis node.
+- Updated `_canonical_row_key`/`_rows_match` to require dimension-signature equality (and presentation ancestor equality when present) before falling back to the existing concept/label heuristic. Balance sheet rows now only accept candidates that share the same axis membership, so the 2020 resale guarantee disclosure no longer occupies the anchor slot.
+- Added `test_dimension_signature_prevents_cross_context_alignment` to reproduce the Tesla scenario and verify that the disclosure column is confined to the leftovers list while the primary-row ensemble contains the `$3,091M` balance-sheet fact.
+- Manual verification: rebuilt a five-year TSLA ensemble locally and confirmed the "Operating Lease Vehicles" row now shows `[2024: 5,581M, 2023: 5,989M, 2022: 5,035M, 2021: 4,511M, 2020: 3,091M]` on the anchor row with the disclosure-only `$43M` no longer appearing as a duplicate line.
+
+## Follow-up
+- Income statement rows still surface multiple dimension signatures (e.g., product-axis vs. product+segment) and need additional policy before we freeze the ensemble output. Capture those findings in a dedicated debug note once scoped.
