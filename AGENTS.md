@@ -55,6 +55,6 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 6. Record commands + findings in the release notes before tagging.
 
 ## Current Status
-- Presentation-first pipeline (Phase 3) is stable; TSLA regression run is green.
-- Outstanding polish: calendar-aware column headers and the broader regression sweep before release tagging.
-- MetaLinks `groupType` filter keeps primary statements by default; pass `--include-disclosures` to surface schedules and cover pages.
+- Presentation-first pipeline (Phase 3) remains stable; TSLA single-filing regression is still the baseline validation.
+- Multi-filing ensemble work is underway: `ensemble_to_xlsx.py` downloads N filings, the newest anchors row order, and merged workbooks expose one period per filing.
+- Focus areas: tighten cross-filing row alignment, add broader regression coverage for the ensemble path.
