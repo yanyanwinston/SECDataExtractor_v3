@@ -157,8 +157,8 @@ Definitions for all XBRL concepts with their labels.
 ```
 
 **Label Types:**
+- `ns0` = Viewer-terse label (closest to the HTML statement wording; preferred for Excel output)
 - `std` = Standard label
-- `ns0` = Terse label (shorter version)
 - `ns1` = Total label (for totals/subtotals)
 - `ns2` = Negated terse label
 - `ns4` = Negated standard label
@@ -210,7 +210,7 @@ def build_presentation_tree(role_id, viewer_data):
 
         return PresentationNode(
             concept=concept_name,
-            label=get_best_label(concept_info),
+            label=get_best_label(concept_info),  # prefers ns0/terse labels
             depth=depth,
             abstract=not has_facts_for_concept(concept_name),
             children=children
