@@ -401,6 +401,7 @@ class FactMatcher:
 
         entries = self.concept_labels.get(concept) or {}
         for key in (
+            "ns0",
             "terseLabel",
             "label",
             "std",

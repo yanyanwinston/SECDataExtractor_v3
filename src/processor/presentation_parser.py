@@ -33,6 +33,7 @@ class PresentationParser:
             self.label_priority = ["label", "std"]
         else:
             self.label_priority = [
+                "ns0",
                 "terseLabel",
                 "totalLabel",
                 "verboseLabel",
