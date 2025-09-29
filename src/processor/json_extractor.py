@@ -3,10 +3,11 @@ JSON extractor for parsing iXBRL viewer data from HTML.
 """
 
 import json
-import re
 import logging
+import re
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Iterable, List, Optional
+from xml.etree import ElementTree as ET
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ class ViewerDataExtractor:
                     json_data["role_map"] = role_map
 
                 concept_labels = self._build_concept_label_map(
-                    meta_links, html_file.name
+                    meta_links, html_file.name, html_file
                 )
                 if concept_labels:
                     json_data["concept_labels"] = concept_labels
@@ -225,7 +226,10 @@ class ViewerDataExtractor:
         }
 
     def _build_concept_label_map(
-        self, meta_links: Dict[str, Any], instance_name: str
+        self,
+        meta_links: Dict[str, Any],
+        instance_name: str,
+        viewer_path: Path,
     ) -> Optional[Dict[str, Dict[str, str]]]:
         """Build concept label map keyed by concept QName."""
         instance_data = meta_links.get("instance") or {}
@@ -237,30 +241,137 @@ class ViewerDataExtractor:
             return None
 
         tag_block = instance_entry.get("tag")
-
-        if not isinstance(tag_block, dict):
-            return None
-
         concept_labels: Dict[str, Dict[str, str]] = {}
 
-        for raw_name, payload in tag_block.items():
-            if not isinstance(payload, dict):
-                continue
+        if isinstance(tag_block, dict):
+            for raw_name, payload in tag_block.items():
+                if not isinstance(payload, dict):
+                    continue
 
-            concept_qname = raw_name.replace("_", ":", 1)
-            lang_info = payload.get("lang") or {}
-            role_entries: Dict[str, str] = {}
+                concept_qname = raw_name.replace("_", ":", 1)
+                lang_info = payload.get("lang") or {}
+                role_entries: Dict[str, str] = {}
 
-            for lang_data in lang_info.values():
-                roles = lang_data.get("role") or {}
-                for role_name, role_value in roles.items():
-                    if isinstance(role_value, str) and role_value.strip():
-                        role_entries.setdefault(role_name, role_value)
+                for lang_data in lang_info.values():
+                    roles = lang_data.get("role") or {}
+                    for role_name, role_value in roles.items():
+                        if isinstance(role_value, str) and role_value.strip():
+                            role_entries.setdefault(role_name, role_value)
 
-            if role_entries:
-                concept_labels[concept_qname] = role_entries
+                if role_entries:
+                    concept_labels[concept_qname] = role_entries
+
+        # Fall back to the label linkbase when MetaLinks omits concept captions
+        fallback_labels = self._load_label_linkbase_labels(
+            viewer_path,
+            instance_entry.get("dts", {}).get("labelLink", {}).get("local") or [],
+        )
+
+        for concept_qname, roles in fallback_labels.items():
+            target = concept_labels.setdefault(concept_qname, {})
+            for role, text in roles.items():
+                target.setdefault(role, text)
 
         return concept_labels or None
+
+    def _load_label_linkbase_labels(
+        self, viewer_path: Path, label_names: Iterable[str]
+    ) -> Dict[str, Dict[str, str]]:
+        """Parse label linkbase files to recover concept captions."""
+
+        search_dir = viewer_path.parent
+        candidates = []
+
+        for name in label_names:
+            candidate = search_dir / name
+            if candidate.exists():
+                candidates.append(candidate)
+
+        if not candidates:
+            candidates = sorted(search_dir.glob("*_lab.xml"))
+
+        label_map: Dict[str, Dict[str, str]] = {}
+        if not candidates:
+            return label_map
+
+        ns = {
+            "link": "http://www.xbrl.org/2003/linkbase",
+            "xlink": "http://www.w3.org/1999/xlink",
+            "xml": "http://www.w3.org/XML/1998/namespace",
+        }
+
+        for label_path in candidates:
+            try:
+                tree = ET.parse(label_path)
+            except Exception as exc:
+                logger.debug("Failed parsing label linkbase %s: %s", label_path, exc)
+                continue
+
+            root = tree.getroot()
+            locator_targets: Dict[str, str] = {}
+            for locator in root.findall(".//link:loc", ns):
+                label_attr = locator.get(f"{{{ns['xlink']}}}label")
+                href = locator.get(f"{{{ns['xlink']}}}href")
+                if not label_attr or not href:
+                    continue
+                fragment = href.split("#", 1)[-1]
+                concept_qname = self._normalise_qname(fragment)
+                if concept_qname:
+                    locator_targets[label_attr] = concept_qname
+
+            label_texts: Dict[str, Dict[str, str]] = {}
+            for resource in root.findall(".//link:label", ns):
+                resource_label = resource.get(f"{{{ns['xlink']}}}label")
+                role = resource.get(f"{{{ns['xlink']}}}role")
+                lang = (resource.get(f"{{{ns['xml']}}}lang") or "").lower()
+                text = (resource.text or "").strip()
+                if not resource_label or not role or not text:
+                    continue
+                if lang and lang not in {"en", "en-us"}:
+                    continue
+                short_role = self._normalise_role_name(role)
+                label_texts.setdefault(resource_label, {})[short_role] = text
+
+            for arc in root.findall(".//link:labelArc", ns):
+                from_label = arc.get(f"{{{ns['xlink']}}}from")
+                to_label = arc.get(f"{{{ns['xlink']}}}to")
+                if not from_label or not to_label:
+                    continue
+                concept_qname = locator_targets.get(from_label)
+                if not concept_qname:
+                    continue
+                roles = label_texts.get(to_label)
+                if not roles:
+                    continue
+                target = label_map.setdefault(concept_qname, {})
+                for role, text_value in roles.items():
+                    target.setdefault(role, text_value)
+
+        return label_map
+
+    @staticmethod
+    def _normalise_qname(identifier: Optional[str]) -> Optional[str]:
+        """Convert linkbase identifiers to QName strings."""
+
+        if not identifier:
+            return None
+        if ":" in identifier:
+            return identifier
+        if "_" in identifier:
+            prefix, _, local = identifier.partition("_")
+            if prefix and local:
+                return f"{prefix}:{local}"
+        return identifier
+
+    @staticmethod
+    def _normalise_role_name(role: Optional[str]) -> str:
+        """Collapse role URIs to their short token."""
+
+        if not role:
+            return ""
+        token = role.rsplit("/", 1)[-1]
+        token = token.rsplit("#", 1)[-1]
+        return token
 
     def _clean_json_string(self, json_str: str) -> str:
         """

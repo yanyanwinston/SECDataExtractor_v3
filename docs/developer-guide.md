@@ -59,6 +59,9 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
   and `MetaLinks.json` are stored.
 - When debugging failing filings, start by inspecting the saved `viewer.json` file
   produced via `--save-viewer-json`.
+- Concept labels merge MetaLinks metadata with the local label linkbase. When MetaLinks
+  omits issuer-specific captions, the extractor now reads `*_lab.xml` to repopulate terse and
+  total labels before parsing presentation trees.
 
 ## Tests overview
 - `tests/test_presentation_parser.py` – ensures MetaLinks filtering, label handling,

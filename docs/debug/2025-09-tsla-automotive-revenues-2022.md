@@ -27,6 +27,11 @@
 - The 2022 statement also surfaces an additional dimensional block (rows such as `AutomotiveLeasingMember`, `AutomotiveRegulatoryCreditsMember`) sourced from `RevenueFromContractWithCustomerExcludingAssessedTax`. Those retain their member-specific labels, which is why only the top-level block appears duplicated.
 - Net effect: 2024 has unique member labels at both the concept and `RevenueFromContractWithCustomer` levels; 2022 lacks that granularity for the concept rows, so every dimensional expansion inherits the same `Automotive Revenues` caption.
 
+## Remediation
+- Extend `ViewerDataExtractor` so concept labels fall back to the local label linkbase when MetaLinks omits them.
+- The parser now merges MetaLinks and label-linkbase captions, preserving terse/total labels for issuer-specific concepts.
+- This guarantees that historical filings such as TSLA 2022 keep distinct captions for automotive segment rows across single- and multi-filing exports.
+
 ## Proposed Next Steps
 1. Adjust the member-label cleaning so dimensional qualifiers remain visible (e.g., retain `[Member]`, append the axis short name, or map to a human-readable suffix).
 2. Regenerate `tsla-multi-year.xlsx` and verify that the formerly duplicated rows now display distinct labels.
