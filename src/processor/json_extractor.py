@@ -40,6 +40,8 @@ class ViewerDataExtractor:
         if not html_file.exists():
             raise FileNotFoundError(f"Viewer HTML file not found: {viewer_html_path}")
 
+        meta_links_path: Optional[Path] = None
+
         try:
             # Read HTML content
             with open(html_file, "r", encoding="utf-8", errors="ignore") as f:
@@ -52,7 +54,7 @@ class ViewerDataExtractor:
                 raise ValueError("No viewer JSON data found in HTML file")
 
             # Attempt to load supplemental metadata (MetaLinks)
-            meta_links = self._load_meta_links(
+            meta_links, meta_links_path = self._load_meta_links(
                 html_file, extra_candidates=meta_links_candidates or []
             )
             if meta_links:
@@ -68,8 +70,29 @@ class ViewerDataExtractor:
                 if concept_labels:
                     json_data["concept_labels"] = concept_labels
 
+            context_file_candidates: List[Path] = []
+            if meta_links and meta_links_path:
+                instance_data = meta_links.get("instance") or {}
+                base_dir = meta_links_path.parent
+                inline_names: Set[str] = set()
+                for entry in instance_data.values():
+                    inline_payload = (
+                        entry.get("dts", {}).get("inline", {}).get("local") or []
+                    )
+                    for inline_name in inline_payload:
+                        inline_names.add(inline_name)
+
+                for inline_name in inline_names:
+                    stem = Path(inline_name).stem
+                    candidate = base_dir / f"{stem}_htm.xml"
+                    if candidate.exists():
+                        context_file_candidates.append(candidate)
+
+                if not context_file_candidates:
+                    context_file_candidates.extend(base_dir.glob("*_htm.xml"))
+
             visible_signatures = self._extract_visible_fact_signatures(
-                html_content, html_file
+                html_content, html_file, context_file_candidates
             )
             if visible_signatures:
                 json_data["visible_fact_signatures"] = visible_signatures
@@ -137,7 +160,7 @@ class ViewerDataExtractor:
 
     def _load_meta_links(
         self, html_file: Path, extra_candidates: List[Path]
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[Path]]:
         """Load MetaLinks.json located near the viewer HTML or provided candidates."""
         candidates = [html_file.with_name("MetaLinks.json")]
 
@@ -154,7 +177,7 @@ class ViewerDataExtractor:
             try:
                 with candidate.open("r", encoding="utf-8") as fp:
                     logger.info("Using MetaLinks from %s", candidate)
-                    return json.load(fp)
+                    return json.load(fp), candidate
             except Exception as exc:
                 logger.warning(
                     "Failed to parse MetaLinks.json at %s: %s", candidate, exc
@@ -163,7 +186,7 @@ class ViewerDataExtractor:
             "No MetaLinks companion found for %s; using viewer JSON alone",
             html_file.name,
         )
-        return None
+        return None, None
 
     def _build_role_map(
         self, meta_links: Dict[str, Any], instance_name: str
@@ -282,7 +305,10 @@ class ViewerDataExtractor:
         return concept_labels or None
 
     def _extract_visible_fact_signatures(
-        self, html_content: str, html_file: Path
+        self,
+        html_content: str,
+        html_file: Path,
+        context_file_candidates: Optional[Iterable[Path]] = None,
     ) -> Optional[Dict[str, List[List[Any]]]]:
         """Scan the inline HTML for visible facts grouped by statement heading."""
 
@@ -299,42 +325,66 @@ class ViewerDataExtractor:
         }
 
         context_dims: Dict[str, Tuple[Tuple[str, str], ...]] = {}
-        context_file = html_file.with_name(f"{html_file.stem}_htm.xml")
-        if context_file.exists():
+
+        def ingest_contexts(context_elements: Iterable[ET.Element]) -> None:
+            for ctx in context_elements:
+                ctx_id = ctx.get("id")
+                if not ctx_id:
+                    continue
+
+                dims: List[Tuple[str, str]] = []
+                segment = ctx.find(
+                    "{http://www.xbrl.org/2003/instance}entity/{http://www.xbrl.org/2003/instance}segment"
+                )
+                if segment is not None:
+                    for member in segment.findall(
+                        "{http://xbrl.org/2006/xbrldi}explicitMember"
+                    ):
+                        axis = member.get("dimension") or ""
+                        member_value = (member.text or "").strip()
+                        if not axis or not member_value:
+                            continue
+                        dims.append(
+                            (self._local_name(axis), self._local_name(member_value))
+                        )
+
+                dims_tuple = tuple(
+                    sorted((axis.lower(), member.lower()) for axis, member in dims)
+                )
+                context_dims[ctx_id] = dims_tuple
+
+        context_sources: List[Path] = []
+        default_context_file = html_file.with_name(f"{html_file.stem}_htm.xml")
+        if default_context_file.exists():
+            context_sources.append(default_context_file)
+
+        for candidate in context_file_candidates or []:
+            if candidate not in context_sources and candidate.exists():
+                context_sources.append(candidate)
+
+        for context_file in context_sources:
             try:
                 context_tree = ET.parse(context_file)
-                root = context_tree.getroot()
-                for ctx in root.findall(
-                    ".//{http://www.xbrl.org/2003/instance}context"
-                ):
-                    ctx_id = ctx.get("id")
-                    if not ctx_id:
-                        continue
-
-                    dims: List[Tuple[str, str]] = []
-                    segment = ctx.find(
-                        "{http://www.xbrl.org/2003/instance}entity/{http://www.xbrl.org/2003/instance}segment"
+                ingest_contexts(
+                    context_tree.getroot().findall(
+                        ".//{http://www.xbrl.org/2003/instance}context"
                     )
-                    if segment is not None:
-                        for member in segment.findall(
-                            "{http://xbrl.org/2006/xbrldi}explicitMember"
-                        ):
-                            axis = member.get("dimension") or ""
-                            member_value = (member.text or "").strip()
-                            if not axis or not member_value:
-                                continue
-                            dims.append(
-                                (self._local_name(axis), self._local_name(member_value))
-                            )
-
-                    dims_tuple = tuple(
-                        sorted((axis.lower(), member.lower()) for axis, member in dims)
-                    )
-                    context_dims[ctx_id] = dims_tuple
+                )
             except Exception as exc:
                 logger.debug(
                     "Failed to parse context metadata from %s: %s", context_file, exc
                 )
+
+        if not context_dims:
+            inline_contexts = document.xpath(
+                "//ix:header//xbrli:context", namespaces=ns
+            )
+            if inline_contexts:
+                logger.debug(
+                    "Using inline header contexts for %s (no sidecar XML found)",
+                    html_file.name,
+                )
+                ingest_contexts(inline_contexts)
 
         visible: Dict[str, Set[Tuple[str, Tuple[Tuple[str, str], ...]]]] = {}
 
