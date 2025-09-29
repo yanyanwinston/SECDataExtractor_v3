@@ -45,6 +45,7 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 - Canonical docs live in `docs/`: `architecture.md`, `user-guide.md`, `cli-reference.md`, `developer-guide.md`.
 - Historical specs: `docs/11-refactor-spec-v3.1.md`, `SPEC.md`, `CLAUDE.md`.
 - Update README and the docs whenever behaviour changes; capture validation commands in PR summaries.
+- Debug write-ups belong in `docs/debug/` and must follow the `YYYY-MM-topic.md` naming convention (e.g., `2025-09-tsla-automotive-revenues-2022.md`).
 
 ## Release Checklist
 1. `PYTHONPATH=. pytest`
