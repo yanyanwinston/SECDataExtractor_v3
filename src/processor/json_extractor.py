@@ -387,29 +387,60 @@ class ViewerDataExtractor:
                 ingest_contexts(inline_contexts)
 
         visible: Dict[str, Set[Tuple[str, Tuple[Tuple[str, str], ...]]]] = {}
+        processed_tables: Set[int] = set()
+
+        def resolve_heading(
+            node: ET.Element,
+        ) -> Optional[Tuple[ET.Element, str]]:
+            """Return the element whose text should be treated as the heading and its key."""
+
+            raw_label = " ".join(node.itertext()).strip()
+            heading_key = self._normalise_statement_label(raw_label)
+            if heading_key:
+                return node, heading_key
+
+            # Workiva filings insert empty anchor divs ahead of the visible heading.
+            max_hops = 6
+            sibling = node.getnext()
+            hops = 0
+            while sibling is not None and hops < max_hops:
+                if not isinstance(sibling.tag, str):
+                    sibling = sibling.getnext()
+                    hops += 1
+                    continue
+
+                if sibling.tag.lower() == "table":
+                    break
+
+                sibling_label = " ".join(sibling.itertext()).strip()
+                sibling_key = self._normalise_statement_label(sibling_label)
+                if sibling_key:
+                    return sibling, sibling_key
+
+                sibling = sibling.getnext()
+                hops += 1
+
+            return None
 
         for element in document.xpath("//*[@id]"):
-            element_id = (element.get("id") or "").lower()
-            label = " ".join(element.itertext()).strip()
-            key = self._normalise_statement_label(label)
-            if not key:
+            if not isinstance(element.tag, str):
                 continue
 
-            if element_id and not any(
-                token in element_id
-                for token in (
-                    "statement",
-                    "statements",
-                    "balance_sheets",
-                    "balance_sheet",
-                )
-            ):
+            heading_data = resolve_heading(element)
+            if not heading_data:
                 continue
 
-            table_nodes = element.xpath("following::table[1]")
+            heading_element, key = heading_data
+
+            table_nodes = heading_element.xpath("following::table[1]")
             if not table_nodes:
                 continue
             table = table_nodes[0]
+
+            table_identity = id(table)
+            if table_identity in processed_tables:
+                continue
+            processed_tables.add(table_identity)
 
             signature_set = visible.setdefault(key, set())
             for ix_node in table.iter():
@@ -466,7 +497,9 @@ class ViewerDataExtractor:
             return None
         if cleaned.startswith("item "):
             return None
-        if "statement" not in cleaned and "balance sheet" not in cleaned:
+        if "balance sheet" not in cleaned and not re.search(
+            r"\bstatements?\s+of\b", cleaned
+        ):
             return None
         cleaned = re.sub(r"^statement\s*-\s*", "", cleaned)
         cleaned = cleaned.strip()
