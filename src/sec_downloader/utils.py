@@ -73,7 +73,7 @@ def get_user_agent() -> str:
     Returns:
         User-Agent string
     """
-    return "SECDataExtractor v3.0 user@example.com"
+    return "SECDataExtractor v3.0 daidaiwahaha@icloud.com"
 
 
 def create_safe_filename(name: str, max_length: int = 100) -> str:
