@@ -29,10 +29,10 @@
 
 ## Remediation
 - Extend `ViewerDataExtractor` so concept labels fall back to the local label linkbase when MetaLinks omits them.
-- The parser now merges MetaLinks and label-linkbase captions, preserving terse/total labels for issuer-specific concepts.
-- This guarantees that historical filings such as TSLA 2022 keep distinct captions for automotive segment rows across single- and multi-filing exports.
+- `FactMatcher` now treats single dimension combinations as part of the base line item, keeping the concept caption instead of reusing the member label (e.g., `Automotive sales` instead of `Automotive Revenues`).
+- The parser merges MetaLinks and label-linkbase captions, ensuring historical filings such as TSLA 2022 retain distinct automotive line items across single- and multi-filing exports.
 
 ## Proposed Next Steps
-1. Adjust the member-label cleaning so dimensional qualifiers remain visible (e.g., retain `[Member]`, append the axis short name, or map to a human-readable suffix).
-2. Regenerate `tsla-multi-year.xlsx` and verify that the formerly duplicated rows now display distinct labels.
-3. Spot-check additional multi-year exports to ensure the updated labelling strategy improves clarity without introducing regressions.
+1. Inline allow-list: Parsing the iXBRL HTML now yields a concept/dimension signature list for each primary statement (see `visible_fact_signatures` in the viewer JSON). `FactMatcher` uses this allow-list to drop rows that never appear in the HTML table. Verify the behaviour holds for Balance Sheet, Cash Flows, and Equity statements before broadening the change.
+2. Regenerate the official outputs (`render_viewer_to_xlsx.py` for 2022 and `ensemble_to_xlsx.py` for the multi-year workbook) so downstream consumers pick up the leaner Income Statement.
+3. Evaluate caching or persisting the parsed signature maps; current implementation re-parses the HTML every run which adds overhead for ensemble batches.

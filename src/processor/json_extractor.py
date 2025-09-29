@@ -6,8 +6,9 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from xml.etree import ElementTree as ET
+from lxml import html
 
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,12 @@ class ViewerDataExtractor:
                 )
                 if concept_labels:
                     json_data["concept_labels"] = concept_labels
+
+            visible_signatures = self._extract_visible_fact_signatures(
+                html_content, html_file
+            )
+            if visible_signatures:
+                json_data["visible_fact_signatures"] = visible_signatures
 
             logger.info("Successfully extracted viewer JSON data")
             return json_data
@@ -273,6 +280,153 @@ class ViewerDataExtractor:
                 target.setdefault(role, text)
 
         return concept_labels or None
+
+    def _extract_visible_fact_signatures(
+        self, html_content: str, html_file: Path
+    ) -> Optional[Dict[str, List[List[Any]]]]:
+        """Scan the inline HTML for visible facts grouped by statement heading."""
+
+        try:
+            document = html.fromstring(html_content.encode("utf-8"))
+        except Exception as exc:
+            logger.debug("Failed to parse HTML for visible fact extraction: %s", exc)
+            return None
+
+        ns = {
+            "ix": "http://www.xbrl.org/2013/inlineXBRL",
+            "xbrli": "http://www.xbrl.org/2003/instance",
+            "xbrldi": "http://xbrl.org/2006/xbrldi",
+        }
+
+        context_dims: Dict[str, Tuple[Tuple[str, str], ...]] = {}
+        context_file = html_file.with_name(f"{html_file.stem}_htm.xml")
+        if context_file.exists():
+            try:
+                context_tree = ET.parse(context_file)
+                root = context_tree.getroot()
+                for ctx in root.findall(
+                    ".//{http://www.xbrl.org/2003/instance}context"
+                ):
+                    ctx_id = ctx.get("id")
+                    if not ctx_id:
+                        continue
+
+                    dims: List[Tuple[str, str]] = []
+                    segment = ctx.find(
+                        "{http://www.xbrl.org/2003/instance}entity/{http://www.xbrl.org/2003/instance}segment"
+                    )
+                    if segment is not None:
+                        for member in segment.findall(
+                            "{http://xbrl.org/2006/xbrldi}explicitMember"
+                        ):
+                            axis = member.get("dimension") or ""
+                            member_value = (member.text or "").strip()
+                            if not axis or not member_value:
+                                continue
+                            dims.append(
+                                (self._local_name(axis), self._local_name(member_value))
+                            )
+
+                    dims_tuple = tuple(
+                        sorted((axis.lower(), member.lower()) for axis, member in dims)
+                    )
+                    context_dims[ctx_id] = dims_tuple
+            except Exception as exc:
+                logger.debug(
+                    "Failed to parse context metadata from %s: %s", context_file, exc
+                )
+
+        visible: Dict[str, Set[Tuple[str, Tuple[Tuple[str, str], ...]]]] = {}
+
+        for element in document.xpath("//*[@id]"):
+            element_id = (element.get("id") or "").lower()
+            label = " ".join(element.itertext()).strip()
+            key = self._normalise_statement_label(label)
+            if not key:
+                continue
+
+            if element_id and not any(
+                token in element_id
+                for token in (
+                    "statement",
+                    "statements",
+                    "balance_sheets",
+                    "balance_sheet",
+                )
+            ):
+                continue
+
+            table_nodes = element.xpath("following::table[1]")
+            if not table_nodes:
+                continue
+            table = table_nodes[0]
+
+            signature_set = visible.setdefault(key, set())
+            for ix_node in table.iter():
+                tag = ix_node.tag.lower() if isinstance(ix_node.tag, str) else ""
+                if tag not in {"ix:nonfraction", "ix:nonnumeric"}:
+                    continue
+
+                if any(
+                    isinstance(ancestor.tag, str)
+                    and ancestor.tag.lower().endswith("hidden")
+                    for ancestor in ix_node.iterancestors()
+                ):
+                    continue
+
+                concept_name = ix_node.get("name")
+                context_ref = ix_node.get("contextref")
+                if not concept_name or not context_ref:
+                    continue
+
+                raw_dims = context_dims.get(context_ref, [])
+                dims_tuple = tuple(
+                    sorted(
+                        (
+                            self._local_name(axis).lower(),
+                            self._local_name(member).lower(),
+                        )
+                        for axis, member in raw_dims
+                        if axis and member
+                    )
+                )
+                signature_set.add((self._local_name(concept_name).lower(), dims_tuple))
+
+        if not visible:
+            return None
+
+        serialised: Dict[str, List[List[Any]]] = {}
+        for key, entries in visible.items():
+            serialised[key] = [
+                [concept, [[axis, member] for axis, member in dims]]
+                for concept, dims in sorted(entries)
+            ]
+
+        return serialised
+
+    @staticmethod
+    def _normalise_statement_label(label: Optional[str]) -> Optional[str]:
+        if not label:
+            return None
+        cleaned = re.sub(r"\s+", " ", label).strip().lower()
+        if len(cleaned) > 120:
+            return None
+        cleaned = cleaned.replace("–", "-")
+        if cleaned.startswith("note ") or cleaned.startswith("notes "):
+            return None
+        if cleaned.startswith("item "):
+            return None
+        if "statement" not in cleaned and "balance sheet" not in cleaned:
+            return None
+        cleaned = re.sub(r"^statement\s*-\s*", "", cleaned)
+        cleaned = cleaned.strip()
+        return cleaned or None
+
+    @staticmethod
+    def _local_name(value: Optional[str]) -> str:
+        if not value:
+            return ""
+        return value.split(":", 1)[-1]
 
     def _load_label_linkbase_labels(
         self, viewer_path: Path, label_names: Iterable[str]

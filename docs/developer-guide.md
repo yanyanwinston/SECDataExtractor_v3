@@ -62,6 +62,9 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 - Concept labels merge MetaLinks metadata with the local label linkbase. When MetaLinks
   omits issuer-specific captions, the extractor now reads `*_lab.xml` to repopulate terse and
   total labels before parsing presentation trees.
+- Fact matching collapses single-dimension concept facts back to the base line item when the
+  dimension fingerprint is the same for every context. This prevents generic member names from
+  replacing concept captions in legacy filings (e.g., TSLA 2022 automotive revenues).
 
 ## Tests overview
 - `tests/test_presentation_parser.py` – ensures MetaLinks filtering, label handling,

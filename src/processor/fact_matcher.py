@@ -7,7 +7,7 @@ nodes, creating complete statement tables ready for Excel generation.
 
 import logging
 import math
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from .presentation_models import (
     PresentationNode,
@@ -38,12 +38,29 @@ class FactMatcher:
         self.use_scale_hint = use_scale_hint
         self.expand_dimensions = expand_dimensions
         self.concept_labels: Dict[str, Dict[str, str]] = {}
+        self._concept_labels_by_local: Dict[str, Dict[str, str]] = {}
+        self.active_visible_signatures: Optional[
+            Set[Tuple[str, Tuple[Tuple[str, str], ...]]]
+        ] = None
 
     def update_concept_labels(
         self, labels: Optional[Dict[str, Dict[str, str]]]
     ) -> None:
         """Refresh the concept label map supplied by the presentation parser."""
         self.concept_labels = labels or {}
+        self._concept_labels_by_local = {}
+        for qname, payload in (labels or {}).items():
+            if not isinstance(qname, str):
+                continue
+            local = qname.split(":", 1)[-1]
+            self._concept_labels_by_local.setdefault(local, payload)
+
+    def activate_visible_signatures(
+        self, signatures: Optional[Set[Tuple[str, Tuple[Tuple[str, str], ...]]]]
+    ) -> None:
+        """Set the active allow-list of concept/dimension signatures."""
+
+        self.active_visible_signatures = signatures
 
     def match_facts_to_statement(
         self, statement: PresentationStatement, facts: dict, periods: List[Period]
@@ -100,7 +117,9 @@ class FactMatcher:
 
         logger.debug(f"Created {len(rows)} rows for statement")
 
-        return StatementTable(statement=statement, periods=periods, rows=rows)
+        deduped_rows = self._dedupe_statement_rows(rows, periods)
+
+        return StatementTable(statement=statement, periods=periods, rows=deduped_rows)
 
     def _generate_rows_for_node(
         self,
@@ -164,12 +183,21 @@ class FactMatcher:
         )
 
         generated_rows: List[StatementRow] = []
+        single_dimension_key: Optional[Tuple[Tuple[str, str], ...]] = None
+        if len(sorted_keys) == 1:
+            only_key = sorted_keys[0]
+            if only_key:
+                single_dimension_key = only_key
 
         for dims_key in sorted_keys:
             group = fact_groups[dims_key]
             dims_map = dict(dims_key)
 
-            if not dims_map:
+            use_fallback_label = (
+                single_dimension_key is not None and dims_key == single_dimension_key
+            )
+
+            if not dims_map or use_fallback_label:
                 row_label = node.label
                 row_depth = display_depth
                 abstract = node.abstract
@@ -212,6 +240,87 @@ class FactMatcher:
                 dimension_signature=(),
             )
         ]
+
+    def _dedupe_statement_rows(
+        self, rows: List[StatementRow], periods: List[Period]
+    ) -> List[StatementRow]:
+        """Drop rows that repeat the same label/value tuple."""
+
+        if not rows:
+            return rows
+
+        period_labels = [period.label for period in periods]
+        seen: Dict[Tuple[str, Tuple], StatementRow] = {}
+        ordered: List[StatementRow] = []
+
+        for row in rows:
+            label_key = self._normalise_label(row.label)
+            value_key = tuple(
+                self._cell_signature(row.cells.get(label)) for label in period_labels
+            )
+            key = (label_key, value_key)
+            if key in seen:
+                continue
+            seen[key] = row
+            ordered.append(row)
+
+        return self._filter_visible_rows(ordered)
+
+    def _filter_visible_rows(self, rows: List[StatementRow]) -> List[StatementRow]:
+        if not rows or not self.active_visible_signatures:
+            return rows
+
+        filtered: List[StatementRow] = []
+
+        for row in rows:
+            if row.is_abstract:
+                filtered.append(row)
+                continue
+
+            if not any(cell.raw_value is not None for cell in row.cells.values()):
+                filtered.append(row)
+                continue
+
+            signature = self._row_signature(row)
+            if signature in self.active_visible_signatures:
+                filtered.append(row)
+            else:
+                logger.debug(
+                    "Skipping row '%s' (concept=%s, signature=%s) not present in visible set",
+                    row.label,
+                    row.node.concept,
+                    signature,
+                )
+
+        return filtered
+
+    def _row_signature(
+        self, row: StatementRow
+    ) -> Tuple[str, Tuple[Tuple[str, str], ...]]:
+        concept = self._normalise_concept(row.node.concept)
+        dims = row.dimension_signature or ()
+        dims_tuple = tuple(sorted((axis, member) for axis, member in dims))
+        return concept, dims_tuple
+
+    @staticmethod
+    def _normalise_concept(concept: Optional[str]) -> str:
+        if not concept:
+            return ""
+        return concept.split(":", 1)[-1].lower()
+
+    @staticmethod
+    def _cell_signature(cell: Optional[Cell]) -> Tuple:
+        """Represent a cell's value for dedupe comparisons."""
+
+        if cell is None:
+            return (None, None)
+        return (cell.raw_value, cell.value)
+
+    @staticmethod
+    def _normalise_label(label: Optional[str]) -> str:
+        if not label:
+            return ""
+        return "".join(ch for ch in label.lower() if ch.isalnum())
 
     def _group_facts_by_dimensions(
         self,
@@ -472,6 +581,9 @@ class FactMatcher:
         """Look up a preferred label for the supplied concept."""
 
         entries = self.concept_labels.get(concept) or {}
+        if not entries:
+            local = concept.split(":", 1)[-1] if concept else concept
+            entries = self._concept_labels_by_local.get(local, {})
         for key in (
             "ns0",
             "terseLabel",

@@ -3,9 +3,10 @@ Data parser for converting viewer JSON to structured data models.
 """
 
 import logging
+import re
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 from .data_models import Statement, Period, Row, ProcessingResult
 from .value_formatter import ValueFormatter
@@ -43,6 +44,58 @@ class DataParser:
             expand_dimensions=expand_dimensions,
         )
         self.include_disclosures = include_disclosures
+
+    @staticmethod
+    def _normalise_statement_key(label: Optional[str]) -> Optional[str]:
+        if not label:
+            return None
+
+        cleaned = re.sub(r"\s+", " ", label).strip().lower().replace("–", "-")
+        cleaned = re.sub(r"^\d+\s*-\s*", "", cleaned)
+        cleaned = re.sub(r"^statement\s*-\s*", "", cleaned)
+        cleaned = cleaned.replace("statement - ", "")
+        cleaned = re.sub(r"^statement\s+", "", cleaned)
+        cleaned = cleaned.strip()
+        return cleaned or None
+
+    def _load_visible_signatures(
+        self, payload: Optional[Dict[str, List[List[Any]]]]
+    ) -> Dict[str, Set[Tuple[str, Tuple[Tuple[str, str], ...]]]]:
+        result: Dict[str, Set[Tuple[str, Tuple[Tuple[str, str], ...]]]] = {}
+
+        if not payload:
+            return result
+
+        for raw_key, entries in payload.items():
+            normalised = self._normalise_statement_key(raw_key)
+            if not normalised:
+                continue
+
+            signature_set: Set[Tuple[str, Tuple[Tuple[str, str], ...]]] = set()
+            for entry in entries or []:
+                if not isinstance(entry, list) or not entry:
+                    continue
+
+                concept = str(entry[0]).lower()
+                dims_data = entry[1] if len(entry) > 1 else []
+
+                dims_tuple = tuple(
+                    sorted(
+                        (
+                            str(dim[0]).lower(),
+                            str(dim[1]).lower(),
+                        )
+                        for dim in dims_data
+                        if isinstance(dim, list) and len(dim) == 2
+                    )
+                )
+
+                signature_set.add((concept, dims_tuple))
+
+            if signature_set:
+                result[normalised] = signature_set
+
+        return result
 
     def parse_viewer_data(self, viewer_data: Dict[str, Any]) -> ProcessingResult:
         """
@@ -209,6 +262,9 @@ class DataParser:
         self.fact_matcher.update_concept_labels(
             self.presentation_parser.concept_label_map
         )
+        visible_signature_map = self._load_visible_signatures(
+            viewer_data.get("visible_fact_signatures")
+        )
 
         presentation_statements = self._filter_presentation_statements(
             presentation_statements
@@ -231,6 +287,21 @@ class DataParser:
 
         for pres_statement in presentation_statements:
             try:
+                statement_key = self._normalise_statement_key(
+                    pres_statement.statement_name
+                )
+                if not statement_key:
+                    statement_key = self._normalise_statement_key(
+                        getattr(pres_statement, "long_name", None)
+                    )
+
+                if statement_key:
+                    self.fact_matcher.activate_visible_signatures(
+                        visible_signature_map.get(statement_key)
+                    )
+                else:
+                    self.fact_matcher.activate_visible_signatures(None)
+
                 concepts_for_statement = self._collect_concepts_from_statement(
                     pres_statement
                 )
@@ -279,6 +350,8 @@ class DataParser:
                     f"Failed to match facts for {pres_statement.statement_name}: {e}"
                 )
                 continue
+            finally:
+                self.fact_matcher.activate_visible_signatures(None)
 
         statement_tables = primary_tables + supplemental_tables
 
