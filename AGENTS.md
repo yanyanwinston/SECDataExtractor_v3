@@ -57,5 +57,5 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 
 ## Current Status
 - Presentation-first pipeline (Phase 3) remains stable; TSLA single-filing regression is still the baseline validation.
-- Multi-filing ensemble work: `ensemble_to_xlsx.py` now normalises concept namespaces so Balance Sheet rows align cleanly across filings.
-- Focus areas: extend namespace-aware alignment checks to Income Statement, Cash Flows, and Equity statements; broaden regression coverage for the ensemble path.
+- Ensemble refinement continues; Balance Sheet alignment is in good shape, but Income Statement matching still needs substantial work.
+- Expect these Income Statement passes to surface deeper parsing/alignment gaps that could trigger foundational refactors.

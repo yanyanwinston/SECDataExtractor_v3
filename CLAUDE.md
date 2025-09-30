@@ -45,6 +45,7 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 - Canonical docs live in `docs/`: `architecture.md`, `user-guide.md`, `cli-reference.md`, `developer-guide.md`.
 - Historical specs: `docs/11-refactor-spec-v3.1.md`, `SPEC.md`, `CLAUDE.md`.
 - Update README and the docs whenever behaviour changes; capture validation commands in PR summaries.
+- Debug write-ups belong in `docs/debug/` and must follow the `YYYY-MM-topic.md` naming convention (e.g., `2025-09-tsla-automotive-revenues-2022.md`).
 
 ## Release Checklist
 1. `PYTHONPATH=. pytest`
@@ -55,6 +56,6 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 6. Record commands + findings in the release notes before tagging.
 
 ## Current Status
-- Presentation-first pipeline (Phase 3) is stable; TSLA regression run is green.
-- Outstanding polish: calendar-aware column headers and the broader regression sweep before release tagging.
-- MetaLinks `groupType` filter keeps primary statements by default; pass `--include-disclosures` to surface schedules and cover pages.
+- Presentation-first pipeline (Phase 3) remains stable; TSLA single-filing regression is still the baseline validation.
+- Ensemble refinement continues; Balance Sheet alignment is in good shape, but Income Statement matching still needs substantial work.
+- Expect these Income Statement passes to surface deeper parsing/alignment gaps that could trigger foundational refactors.
