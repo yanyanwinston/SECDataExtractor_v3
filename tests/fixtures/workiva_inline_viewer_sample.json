@@ -1,0 +1,357 @@
+{
+  "role_map": {
+    "by_uri": {
+      "http://tesla.com/role/IncomeStatement": {
+        "r_id": "R2",
+        "groupType": "statement",
+        "subGroupType": null,
+        "longName": "Consolidated Statements of Operations",
+        "shortName": "Operations",
+        "order": 2
+      }
+    },
+    "by_long_name": {
+      "consolidated statements of operations": {
+        "r_id": "R2",
+        "groupType": "statement",
+        "subGroupType": null,
+        "longName": "Consolidated Statements of Operations",
+        "shortName": "Operations",
+        "order": 2
+      }
+    },
+    "by_normalized_name": {
+      "consolidated statements of operations": {
+        "r_id": "R2",
+        "groupType": "statement",
+        "subGroupType": null,
+        "longName": "Consolidated Statements of Operations",
+        "shortName": "Operations",
+        "order": 2
+      }
+    }
+  },
+  "visible_fact_signatures": {
+    "Consolidated Statements of Operations": [
+      ["revenues", []],
+      ["automotivesales", [["productorserviceaxis", "automotivesalesmember"]]],
+      ["automotiveregulatorycredits", [["productorserviceaxis", "automotiveregulatorycreditsmember"]]],
+      ["automotiveleasing", [["productorserviceaxis", "automotiveleasingmember"]]],
+      ["totalautomotiverevenues", []],
+      ["costofrevenue", []],
+      ["grossprofit", []],
+      ["operatingexpenses", []],
+      ["operatingincomeloss", []]
+    ]
+  },
+  "concept_labels": {
+    "us-gaap:Revenues": {
+      "terseLabel": "Revenues",
+      "label": "Revenues"
+    },
+    "tsla:AutomotiveSales": {
+      "terseLabel": "Automotive sales",
+      "label": "Automotive Sales"
+    },
+    "tsla:AutomotiveRegulatoryCredits": {
+      "terseLabel": "Automotive regulatory credits",
+      "label": "Automotive Regulatory Credits"
+    },
+    "tsla:AutomotiveLeasing": {
+      "terseLabel": "Automotive leasing",
+      "label": "Automotive Leasing"
+    },
+    "tsla:TotalAutomotiveRevenues": {
+      "terseLabel": "Total automotive revenues",
+      "totalLabel": "Total automotive revenues",
+      "label": "Total Automotive Revenues"
+    },
+    "tsla:EnergyGenerationAndStorageSales": {
+      "terseLabel": "Energy generation and storage sales",
+      "label": "Energy Generation And Storage Sales"
+    },
+    "us-gaap:CostOfRevenue": {
+      "terseLabel": "Cost of revenues",
+      "label": "Cost of Revenues"
+    },
+    "us-gaap:GrossProfit": {
+      "terseLabel": "Gross profit",
+      "totalLabel": "Gross profit",
+      "label": "Gross Profit"
+    },
+    "us-gaap:OperatingExpenses": {
+      "terseLabel": "Operating expenses",
+      "label": "Operating Expenses"
+    },
+    "us-gaap:OperatingIncomeLoss": {
+      "terseLabel": "Income from operations",
+      "totalLabel": "Income from operations",
+      "label": "Income From Operations"
+    }
+  },
+  "sourceReports": [
+    {
+      "targetReports": [
+        {
+          "roleDefs": {
+            "ns2": {
+              "label": "Consolidated Statements of Operations",
+              "uri": "http://tesla.com/role/IncomeStatement"
+            }
+          },
+          "rels": {
+            "pres": {
+              "ns2": {
+                "rootElts": [
+                  "us-gaap:IncomeStatementAbstract"
+                ],
+                "elrs": {
+                  "http://tesla.com/role/IncomeStatement": {
+                    "us-gaap:IncomeStatementAbstract": {
+                      "order": 1,
+                      "children": {
+                        "us-gaap:RevenuesAbstract": {
+                          "order": 2,
+                          "preferredLabel": "terseLabel",
+                          "children": {
+                            "us-gaap:Revenues": {
+                              "order": 3,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "tsla:AutomotiveSales": {
+                              "order": 4,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "tsla:AutomotiveRegulatoryCredits": {
+                              "order": 5,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "tsla:AutomotiveLeasing": {
+                              "order": 6,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "tsla:EnergyGenerationAndStorageSales": {
+                              "order": 7,
+                              "preferredLabel": "terseLabel"
+                            },
+                            "tsla:TotalAutomotiveRevenues": {
+                              "order": 8,
+                              "preferredLabel": "totalLabel"
+                            }
+                          }
+                        },
+                        "us-gaap:CostOfRevenue": {
+                          "order": 9,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "us-gaap:GrossProfit": {
+                          "order": 10,
+                          "preferredLabel": "totalLabel"
+                        },
+                        "us-gaap:OperatingExpenses": {
+                          "order": 11,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "us-gaap:OperatingIncomeLoss": {
+                          "order": 12,
+                          "preferredLabel": "totalLabel"
+                        }
+                      }
+                    },
+                    "us-gaap:RevenuesAbstract": {
+                      "order": 2,
+                      "preferredLabel": "terseLabel",
+                      "children": {
+                        "us-gaap:Revenues": {
+                          "order": 3,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "tsla:AutomotiveSales": {
+                          "order": 4,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "tsla:AutomotiveRegulatoryCredits": {
+                          "order": 5,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "tsla:AutomotiveLeasing": {
+                          "order": 6,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "tsla:EnergyGenerationAndStorageSales": {
+                          "order": 7,
+                          "preferredLabel": "terseLabel"
+                        },
+                        "tsla:TotalAutomotiveRevenues": {
+                          "order": 8,
+                          "preferredLabel": "totalLabel"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "concepts": {
+            "us-gaap:IncomeStatementAbstract": {
+              "l": "Income Statement [Abstract]",
+              "abstract": true
+            },
+            "us-gaap:RevenuesAbstract": {
+              "l": "Revenues:",
+              "abstract": true
+            },
+            "us-gaap:Revenues": {
+              "l": "Revenues"
+            },
+            "tsla:AutomotiveSales": {
+              "l": "Automotive sales"
+            },
+            "tsla:AutomotiveRegulatoryCredits": {
+              "l": "Automotive regulatory credits"
+            },
+            "tsla:AutomotiveLeasing": {
+              "l": "Automotive leasing"
+            },
+            "tsla:EnergyGenerationAndStorageSales": {
+              "l": "Energy generation and storage sales"
+            },
+            "tsla:TotalAutomotiveRevenues": {
+              "l": "Total automotive revenues"
+            },
+            "us-gaap:CostOfRevenue": {
+              "l": "Cost of revenues"
+            },
+            "us-gaap:GrossProfit": {
+              "l": "Gross profit"
+            },
+            "us-gaap:OperatingExpenses": {
+              "l": "Operating expenses"
+            },
+            "us-gaap:OperatingIncomeLoss": {
+              "l": "Income from operations"
+            }
+          },
+          "facts": {
+            "f-entity": {
+              "v": "Tesla Inc",
+              "a": {
+                "c": "dei:EntityRegistrantName",
+                "p": "2024-12-31"
+              }
+            },
+            "f-doc-type": {
+              "v": "10-K",
+              "a": {
+                "c": "dei:DocumentType",
+                "p": "2024-12-31"
+              }
+            },
+            "f-doc-date": {
+              "v": "2024-12-31",
+              "a": {
+                "c": "dei:DocumentPeriodEndDate",
+                "p": "2024-12-31"
+              }
+            },
+            "f-rev-1": {
+              "a": {
+                "c": "us-gaap:Revenues",
+                "v": 97000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            },
+            "f-auto-sales": {
+              "a": {
+                "c": "tsla:AutomotiveSales",
+                "v": 75000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31",
+                "srt:ProductOrServiceAxis": "tsla:AutomotiveSalesMember"
+              }
+            },
+            "f-auto-credits": {
+              "a": {
+                "c": "tsla:AutomotiveRegulatoryCredits",
+                "v": 2000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31",
+                "srt:ProductOrServiceAxis": "tsla:AutomotiveRegulatoryCreditsMember"
+              }
+            },
+            "f-auto-lease": {
+              "a": {
+                "c": "tsla:AutomotiveLeasing",
+                "v": 3000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31",
+                "srt:ProductOrServiceAxis": "tsla:AutomotiveLeasingMember"
+              }
+            },
+            "f-total-auto": {
+              "a": {
+                "c": "tsla:TotalAutomotiveRevenues",
+                "v": 80000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            },
+            "f-energy-sales": {
+              "a": {
+                "c": "tsla:EnergyGenerationAndStorageSales",
+                "v": 17000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31",
+                "srt:ProductOrServiceAxis": "tsla:EnergyGenerationAndStorageSalesMember"
+              }
+            },
+            "f-cogs": {
+              "a": {
+                "c": "us-gaap:CostOfRevenue",
+                "v": 75000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            },
+            "f-gross": {
+              "a": {
+                "c": "us-gaap:GrossProfit",
+                "v": 22000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            },
+            "f-opex": {
+              "a": {
+                "c": "us-gaap:OperatingExpenses",
+                "v": 8000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            },
+            "f-opincome": {
+              "a": {
+                "c": "us-gaap:OperatingIncomeLoss",
+                "v": 14000000,
+                "u": "USD",
+                "d": -6,
+                "p": "2023-01-01/2024-12-31"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -505,7 +505,7 @@ The `test_integration_presentation.py` suite provides solid end-to-end coverage:
 
 ### P0 (Critical – Complete before claiming feature-complete status)
 1. ✅ **Fix Income Statement label collisions** via concept-aware disambiguation
-2. ⚠️ **Add Workiva inline visibility regression test** for hashed anchor handling
+2. ✅ **Add Workiva inline visibility regression test** for hashed anchor handling
 3. ⚠️ **Refactor period selection into strategy classes** for maintainability
 
 ### P1 (High – Improves reliability and user experience)
