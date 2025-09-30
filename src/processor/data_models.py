@@ -2,6 +2,7 @@
 Data models for SEC filing processing.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -60,32 +61,44 @@ class DimensionHierarchy:
 
     # Map from normalized member to set of its direct children
     children: Dict[str, Set[str]] = field(default_factory=dict)
-    # Map from normalized member to its direct parent
-    parents: Dict[str, Optional[str]] = field(default_factory=dict)
+    # Map from normalized member to SET of its direct parents (can have multiple)
+    parents: Dict[str, Set[str]] = field(default_factory=lambda: defaultdict(set))
 
     def add_relationship(self, parent: str, child: str) -> None:
         """Add a parent-child relationship."""
         parent_norm = self._normalize(parent)
         child_norm = self._normalize(child)
         self.children.setdefault(parent_norm, set()).add(child_norm)
-        self.parents[child_norm] = parent_norm
+        self.parents[child_norm].add(parent_norm)
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
-        """Check if ancestor is an ancestor of descendant (recursive)."""
+        """Check if ancestor is an ancestor of descendant (recursive).
+
+        Handles multiple parent paths by checking all possible ancestor chains.
+        """
         ancestor_norm = self._normalize(ancestor)
         descendant_norm = self._normalize(descendant)
 
         if ancestor_norm == descendant_norm:
             return False  # Not counting self
 
-        current = descendant_norm
+        # BFS through all parent paths
+        queue = [descendant_norm]
         visited = set()
-        while current and current not in visited:
+
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
             visited.add(current)
-            parent = self.parents.get(current)
-            if parent == ancestor_norm:
-                return True
-            current = parent
+
+            parents_set = self.parents.get(current, set())
+            for parent in parents_set:
+                if parent == ancestor_norm:
+                    return True
+                if parent not in visited:
+                    queue.append(parent)
+
         return False
 
     def get_all_descendants(self, member: str) -> Set[str]:

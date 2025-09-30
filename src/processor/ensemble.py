@@ -2,16 +2,35 @@
 
 from __future__ import annotations
 
+import difflib
 import logging
 from collections import defaultdict, OrderedDict
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .data_models import Cell, Period, ProcessingResult, Row, Statement, DimensionHierarchy
 
 
 logger = logging.getLogger(__name__)
+
+
+class MatchConfidence(Enum):
+    """Confidence level for row matching."""
+    NONE = 0
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
+@dataclass
+class MatchResult:
+    """Result of comparing two rows for alignment."""
+    matched: bool
+    confidence: MatchConfidence
+    score: int
+    method: str  # e.g., "xbrl", "hybrid", "label", "fuzzy"
 
 
 def _safe_parse_date(value: Optional[str]) -> datetime:
@@ -129,6 +148,49 @@ def _label_token(value: Optional[str]) -> str:
     return (value or "").strip().lower()
 
 
+def _fuzzy_label_similarity(label1: Optional[str], label2: Optional[str]) -> float:
+    """Calculate similarity between two labels using ratio matching.
+
+    Returns a score between 0.0 (completely different) and 1.0 (identical).
+    Uses a simple character-based ratio for now.
+    """
+    if not label1 or not label2:
+        return 0.0
+
+    # Normalize labels
+    s1 = _label_token(label1)
+    s2 = _label_token(label2)
+
+    if s1 == s2:
+        return 1.0
+
+    # Simple ratio: count matching characters in order
+    # This is a simplified version - could use difflib.SequenceMatcher for more accuracy
+    matches = 0
+    total = max(len(s1), len(s2))
+
+    # Count common prefix
+    min_len = min(len(s1), len(s2))
+    for i in range(min_len):
+        if s1[i] == s2[i]:
+            matches += 1
+        else:
+            break
+
+    # Count common suffix (from end)
+    i = -1
+    while abs(i) <= min_len - matches:
+        if s1[i] == s2[i]:
+            matches += 1
+            i -= 1
+        else:
+            break
+
+    # Simple Levenshtein-like ratio
+    # Better approach: use difflib.SequenceMatcher(None, s1, s2).ratio()
+    return matches / total if total > 0 else 0.0
+
+
 def _normalise_signature(
     signature: Optional[Iterable[Tuple[str, str]]]
 ) -> Optional[Tuple[Tuple[str, str], ...]]:
@@ -222,6 +284,136 @@ def _signatures_semantically_compatible(
     return True
 
 
+def _calculate_match_score(
+    anchor: Row,
+    candidate: Row,
+    hierarchy: Optional[DimensionHierarchy] = None,
+) -> MatchResult:
+    """Calculate a match score between two rows using multi-factor analysis.
+
+    Phase 2 implementation: returns confidence scores instead of binary yes/no.
+
+    Scoring tiers:
+    - HIGH (score >= 150): Exact label, same depth, same parent, dims compatible
+    - MEDIUM (score >= 100): Exact label, similar structure (depth ±1)
+    - LOW (score >= 80): Fuzzy label, different structure
+    - NONE (score < 80): No match
+
+    Args:
+        anchor: Row from the anchor filing
+        candidate: Row from the candidate filing
+        hierarchy: Optional dimension hierarchy for semantic matching
+
+    Returns:
+        MatchResult with confidence level and score
+    """
+    score = 0
+    method = "none"
+
+    # Extract normalized attributes
+    anchor_label = _label_token(anchor.label)
+    candidate_label = _label_token(candidate.label)
+    anchor_concept_lower = (anchor.concept or "").lower()
+    candidate_concept_lower = (candidate.concept or "").lower()
+    anchor_normalised = _normalise_concept(anchor.concept)
+    candidate_normalised = _normalise_concept(candidate.concept)
+    anchor_signature = _normalise_signature(getattr(anchor, "dimension_signature", None))
+    candidate_signature = _normalise_signature(getattr(candidate, "dimension_signature", None))
+    anchor_parent_path = _parent_path(anchor)
+    candidate_parent_path = _parent_path(candidate)
+
+    # Safety check: revenue/cost conflict is a blocker
+    is_revenue_cost_conflict = (
+        ("revenue" in anchor_concept_lower and "cost" in candidate_concept_lower)
+        or ("cost" in anchor_concept_lower and "revenue" in candidate_concept_lower)
+    )
+    if is_revenue_cost_conflict:
+        return MatchResult(matched=False, confidence=MatchConfidence.NONE, score=0, method="rejected-revenue-cost")
+
+    # Abstract/concrete must match - REQUIREMENT
+    if anchor.is_abstract != candidate.is_abstract:
+        return MatchResult(matched=False, confidence=MatchConfidence.NONE, score=0, method="rejected-abstract-mismatch")
+    else:
+        score += 10  # Base score for matching abstract/concrete
+
+    # Label matching - HIGHEST WEIGHT
+    if anchor_label and candidate_label:
+        if anchor_label == candidate_label:
+            score += 100  # Exact label match
+            method = "label-exact"
+        else:
+            # Fuzzy label matching
+            similarity = difflib.SequenceMatcher(None, anchor_label, candidate_label).ratio()
+            if similarity > 0.9:
+                score += 80  # Very similar (typos, formatting)
+                method = "label-fuzzy-high"
+            elif similarity > 0.7:
+                score += 50  # Somewhat similar
+                method = "label-fuzzy-medium"
+
+    # Concept matching - SECONDARY
+    if anchor_concept_lower and candidate_concept_lower:
+        if anchor_concept_lower == candidate_concept_lower:
+            score += 50  # Exact concept match
+            if method == "none":
+                method = "concept-exact"
+        elif anchor_normalised == candidate_normalised:
+            score += 30  # Normalized concept match
+            if method == "none":
+                method = "concept-normalized"
+
+    # Structural position - SECONDARY
+    if anchor.depth == candidate.depth:
+        score += 20  # Same depth
+    elif abs(anchor.depth - candidate.depth) == 1:
+        score += 10  # Adjacent depth (minor structure drift)
+
+    # Parent context - CRITICAL (must match for high confidence)
+    parent_path_matches = False
+    if anchor_parent_path and candidate_parent_path:
+        if anchor_parent_path == candidate_parent_path:
+            score += 30  # Same parent context
+            parent_path_matches = True
+        else:
+            # Different parent paths -> can't be high confidence
+            # This prevents matching "Automotive sales" under Revenues with "Automotive sales" under Cost
+            pass
+    elif not anchor_parent_path and not candidate_parent_path:
+        # Both have no parent path (top-level items)
+        parent_path_matches = True
+
+    # Dimension compatibility - BONUS, NOT BLOCKER
+    dims_compatible = False
+    if anchor_signature == candidate_signature:
+        score += 20  # Exact dimension match
+        dims_compatible = True
+    elif hierarchy and anchor_signature and candidate_signature:
+        # Check semantic compatibility
+        if _signatures_semantically_compatible(anchor_signature, candidate_signature, hierarchy):
+            score += 15  # Semantic dimension compatibility
+            dims_compatible = True
+    elif not anchor_signature and not candidate_signature:
+        score += 20  # Both have no dimensions
+        dims_compatible = True
+
+    # Determine confidence level based on score
+    # IMPORTANT: Parent path must match for HIGH confidence (prevents cross-context matching)
+    if score >= 150 and parent_path_matches:
+        confidence = MatchConfidence.HIGH
+        matched = True
+    elif score >= 100:
+        confidence = MatchConfidence.MEDIUM
+        matched = True
+    elif score >= 80:
+        confidence = MatchConfidence.LOW
+        matched = True
+    else:
+        confidence = MatchConfidence.NONE
+        matched = False
+
+    return MatchResult(matched=matched, confidence=confidence, score=score, method=method)
+
+
 def _rows_match(
     anchor: Row,
     candidate: Row,
@@ -229,85 +421,32 @@ def _rows_match(
 ) -> bool:
     """Determine whether two rows should be considered equivalent.
 
+    This is a wrapper around _calculate_match_score() that maintains backward
+    compatibility by returning a boolean. Accepts matches with MEDIUM or HIGH confidence.
+
     Args:
         anchor: Row from the anchor filing
         candidate: Row from the candidate filing
         hierarchy: Optional dimension hierarchy for semantic matching
     """
+    result = _calculate_match_score(anchor, candidate, hierarchy)
 
-    anchor_signature = _normalise_signature(getattr(anchor, "dimension_signature", None))
-    candidate_signature = _normalise_signature(getattr(candidate, "dimension_signature", None))
+    # Log results for automotive rows (debugging)
+    is_automotive = (anchor.label and "automotive" in anchor.label.lower())
+    if is_automotive or result.confidence != MatchConfidence.NONE:
+        if result.matched:
+            logger.info(
+                f"MATCH [{result.confidence.name}] score={result.score} method={result.method}: "
+                f"'{anchor.label}' (concept: {anchor.concept}, depth: {anchor.depth}) ≈ "
+                f"'{candidate.label}' (concept: {candidate.concept}, depth: {candidate.depth})"
+            )
+        elif is_automotive:
+            logger.info(
+                f"MATCH FAIL score={result.score} method={result.method}: "
+                f"'{anchor.label}' vs '{candidate.label}'"
+            )
 
-    # First try strict signature matching
-    if anchor_signature is not None or candidate_signature is not None:
-        if anchor_signature != candidate_signature:
-            # If strict match fails but hierarchy is available, try semantic matching
-            # But only if other attributes align (concept, label, depth, parent path)
-            if not hierarchy:
-                return False
-            # Continue to check other attributes before attempting semantic match
-
-    anchor_parent_path = _parent_path(anchor)
-    candidate_parent_path = _parent_path(candidate)
-
-    if anchor_parent_path is not None or candidate_parent_path is not None:
-        if anchor_parent_path != candidate_parent_path:
-            return False
-
-    anchor_concept = (anchor.concept or "").lower()
-    candidate_concept = (candidate.concept or "").lower()
-    anchor_label = _label_token(anchor.label)
-    candidate_label = _label_token(candidate.label)
-    anchor_normalised = _normalise_concept(anchor.concept)
-    candidate_normalised = _normalise_concept(candidate.concept)
-
-    if anchor_concept and candidate_concept and anchor_concept == candidate_concept:
-        # Exact concept match - now check if dimensions are semantically compatible
-        if anchor_signature != candidate_signature:
-            if _signatures_semantically_compatible(
-                anchor_signature, candidate_signature, hierarchy
-            ):
-                return True
-            return False
-        return True
-
-    if (
-        anchor_normalised == candidate_normalised
-        and anchor.depth == candidate.depth
-        and anchor.is_abstract == candidate.is_abstract
-    ):
-        anchor_node = getattr(anchor, "presentation_node", None)
-        candidate_node = getattr(candidate, "presentation_node", None)
-        anchor_order = getattr(anchor_node, "order", None)
-        candidate_order = getattr(candidate_node, "order", None)
-        if anchor_order is None or candidate_order is None or anchor_order == candidate_order:
-            if anchor_label == candidate_label:
-                # Label and structure match - check semantic dimension compatibility
-                if anchor_signature != candidate_signature:
-                    if _signatures_semantically_compatible(
-                        anchor_signature, candidate_signature, hierarchy
-                    ):
-                        return True
-                    return False
-                return True
-
-            if anchor_normalised:
-                logger.debug(
-                    "Row alignment fallback on concept '%s' despite label mismatch '%s' vs '%s'",
-                    anchor_normalised,
-                    anchor_label,
-                    candidate_label,
-                )
-                # Check semantic dimension compatibility even for fallback matches
-                if anchor_signature != candidate_signature:
-                    if _signatures_semantically_compatible(
-                        anchor_signature, candidate_signature, hierarchy
-                    ):
-                        return True
-                    return False
-                return True
-
-    return False
+    return result.matched
 
 
 def _map_rows(
@@ -327,15 +466,30 @@ def _map_rows(
     matched: List[Optional[Row]] = []
 
     for anchor_row in anchor_rows:
+        # Debug: log when we're trying to match automotive rows
+        is_automotive_anchor = anchor_row.label and "automotive" in anchor_row.label.lower()
+        if is_automotive_anchor and "sales" in anchor_row.label.lower():
+            logger.info(f"=== Trying to match anchor row: '{anchor_row.label}' ===")
+            logger.info(f"    Concept: {anchor_row.concept}")
+            logger.info(f"    Sig: {_normalise_signature(getattr(anchor_row, 'dimension_signature', None))}")
+            logger.info(f"    Candidates to check: {len(remaining)}")
+
         match_index: Optional[int] = None
         for idx, candidate in enumerate(remaining):
+            if is_automotive_anchor and "sales" in anchor_row.label.lower() and candidate.label and "automotive" in candidate.label.lower():
+                logger.info(f"  Checking candidate {idx}: '{candidate.label}'")
             if _rows_match(anchor_row, candidate, hierarchy):
                 match_index = idx
                 break
 
         if match_index is None:
+            if is_automotive_anchor and "sales" in anchor_row.label.lower():
+                logger.info(f"  NO MATCH found for '{anchor_row.label}'")
             matched.append(None)
         else:
+            if is_automotive_anchor and "sales" in anchor_row.label.lower():
+                matched_label = remaining[match_index].label
+                logger.info(f"  MATCHED with candidate: '{matched_label}'")
             matched.append(remaining.pop(match_index))
 
     leftovers: List[Row] = list(remaining)
