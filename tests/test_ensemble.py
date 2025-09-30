@@ -2,6 +2,7 @@
 
 from src.processor import (
     Cell,
+    DimensionHierarchy,
     FilingSlice,
     Period,
     ProcessingResult,
@@ -44,13 +45,19 @@ def _make_statement(name: str, period_specs: list[tuple[str, str, bool]], rows: 
     return Statement(name=name, short_name=name, periods=periods, rows=rows)
 
 
-def _make_result(statement: Statement, company: str, filing_date: str) -> ProcessingResult:
+def _make_result(
+    statement: Statement,
+    company: str,
+    filing_date: str,
+    dimension_hierarchy: DimensionHierarchy | None = None,
+) -> ProcessingResult:
     return ProcessingResult(
         statements=[statement],
         company_name=company,
         filing_date=filing_date,
         form_type="10-K",
         success=True,
+        dimension_hierarchy=dimension_hierarchy,
     )
 
 
@@ -283,3 +290,141 @@ def test_dimension_signature_prevents_cross_context_alignment():
         and row.dimension_signature == disclosure_signature
     )
     assert extra_row.cells["Dec 31, 2023"].raw_value == 43.0
+
+
+def test_dimension_semantic_matching_with_hierarchy():
+    """Test that dimension signatures align when one is parent/child of the other.
+
+    This regression test addresses the TSLA automotive revenue alignment issue where:
+    - 2024 filing uses granular members (automotivesalesmember, automotiveleasingmember)
+    - 2023 filing uses broad parent member (automotiverevenuesmember)
+
+    With hierarchy awareness, these should align on the same row.
+    """
+    # Build dimension hierarchy: automotiverevenuesmember has 3 children
+    hierarchy = DimensionHierarchy()
+    hierarchy.add_relationship(
+        "tsla:AutomotiveRevenuesMember", "tsla:AutomotiveSalesMember"
+    )
+    hierarchy.add_relationship(
+        "tsla:AutomotiveRevenuesMember", "tsla:AutomotiveLeasingMember"
+    )
+    hierarchy.add_relationship(
+        "tsla:AutomotiveRevenuesMember",
+        "tsla:AutomotiveRegulatoryCreditsMember",
+    )
+
+    # 2024 filing uses granular member for automotive sales
+    anchor_sig_sales = (("productorserviceaxis", "automotivesalesmember"),)
+    anchor_sig_leasing = (("productorserviceaxis", "automotiveleasingmember"),)
+    anchor_sig_credits = (
+        ("productorserviceaxis", "automotiveregulatorycreditsmember"),
+    )
+
+    anchor_statement = _make_statement(
+        "Income Statement",
+        [("Dec 31, 2024", "2024-12-31", False)],
+        [
+            _make_row(
+                "Automotive sales",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2024": 85000.0},
+                dimension_signature=anchor_sig_sales,
+            ),
+            _make_row(
+                "Automotive leasing",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2024": 2000.0},
+                dimension_signature=anchor_sig_leasing,
+            ),
+            _make_row(
+                "Automotive regulatory credits",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2024": 1800.0},
+                dimension_signature=anchor_sig_credits,
+            ),
+        ],
+    )
+    anchor_result = _make_result(
+        anchor_statement, "Tesla, Inc.", "2025-01-29", hierarchy
+    )
+
+    # 2023 filing uses parent member for all automotive revenues
+    prior_sig = (("productorserviceaxis", "automotiverevenuesmember"),)
+    prior_statement = _make_statement(
+        "Income Statement",
+        [("Dec 31, 2023", "2023-12-31", False)],
+        [
+            _make_row(
+                "Automotive sales",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2023": 75000.0},
+                dimension_signature=prior_sig,
+            ),
+            _make_row(
+                "Automotive leasing",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2023": 1900.0},
+                dimension_signature=prior_sig,
+            ),
+            _make_row(
+                "Automotive regulatory credits",
+                "tsla:AutomotiveRevenue",
+                {"Dec 31, 2023": 1700.0},
+                dimension_signature=prior_sig,
+            ),
+        ],
+    )
+    prior_result = _make_result(
+        prior_statement, "Tesla, Inc.", "2024-02-01", hierarchy
+    )
+
+    slices = [
+        FilingSlice.from_processing_result("2024 filing", anchor_result),
+        FilingSlice.from_processing_result("2023 filing", prior_result),
+    ]
+
+    ensemble = build_ensemble_result(slices)
+    combined_statement = ensemble.statements[0]
+
+    # With semantic matching, all three rows should align across periods
+    sales_rows = [
+        row for row in combined_statement.rows if row.label == "Automotive sales"
+    ]
+    assert (
+        len(sales_rows) == 1
+    ), f"Expected 1 automotive sales row, got {len(sales_rows)}"
+
+    sales_row = sales_rows[0]
+    assert set(sales_row.cells.keys()) == {
+        "Dec 31, 2024",
+        "Dec 31, 2023",
+    }, "Automotive sales should have both periods"
+    assert sales_row.cells["Dec 31, 2024"].raw_value == 85000.0
+    assert sales_row.cells["Dec 31, 2023"].raw_value == 75000.0
+
+    leasing_rows = [
+        row for row in combined_statement.rows if row.label == "Automotive leasing"
+    ]
+    assert (
+        len(leasing_rows) == 1
+    ), f"Expected 1 automotive leasing row, got {len(leasing_rows)}"
+
+    leasing_row = leasing_rows[0]
+    assert set(leasing_row.cells.keys()) == {"Dec 31, 2024", "Dec 31, 2023"}
+    assert leasing_row.cells["Dec 31, 2024"].raw_value == 2000.0
+    assert leasing_row.cells["Dec 31, 2023"].raw_value == 1900.0
+
+    credits_rows = [
+        row
+        for row in combined_statement.rows
+        if row.label == "Automotive regulatory credits"
+    ]
+    assert (
+        len(credits_rows) == 1
+    ), f"Expected 1 automotive credits row, got {len(credits_rows)}"
+
+    credits_row = credits_rows[0]
+    assert set(credits_row.cells.keys()) == {"Dec 31, 2024", "Dec 31, 2023"}
+    assert credits_row.cells["Dec 31, 2024"].raw_value == 1800.0
+    assert credits_row.cells["Dec 31, 2023"].raw_value == 1700.0

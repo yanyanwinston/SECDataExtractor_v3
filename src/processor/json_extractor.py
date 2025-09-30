@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from xml.etree import ElementTree as ET
 from lxml import html
 
+from .data_models import DimensionHierarchy
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,11 @@ class ViewerDataExtractor:
             )
             if visible_signatures:
                 json_data["visible_fact_signatures"] = visible_signatures
+
+            # Extract dimensional hierarchies from presentation relationships
+            dimension_hierarchy = self._extract_dimension_hierarchy(json_data)
+            if dimension_hierarchy:
+                json_data["dimension_hierarchy"] = dimension_hierarchy
 
             logger.info("Successfully extracted viewer JSON data")
             return json_data
@@ -788,3 +794,58 @@ class ViewerDataExtractor:
                         return text[start_pos : i + 1]
 
         return None
+
+    def _extract_dimension_hierarchy(
+        self, viewer_data: Dict[str, Any]
+    ) -> Optional[DimensionHierarchy]:
+        """Extract dimensional member hierarchies from presentation relationships.
+
+        Args:
+            viewer_data: Complete viewer JSON structure
+
+        Returns:
+            DimensionHierarchy object containing parent-child relationships
+        """
+        try:
+            target = viewer_data.get("sourceReports", [{}])[0].get(
+                "targetReports", [{}]
+            )[0]
+            pres_rels = target.get("rels", {}).get("pres", {})
+
+            if not pres_rels:
+                logger.debug("No presentation relationships found for dimension hierarchy")
+                return None
+
+            hierarchy = DimensionHierarchy()
+
+            # Iterate through all roles and build member hierarchies
+            for role_id, node_dict in pres_rels.items():
+                for parent_concept, children in node_dict.items():
+                    if not isinstance(children, list):
+                        continue
+
+                    # Check if this looks like a dimension member (contains "Member" or "Domain")
+                    parent_lower = parent_concept.lower()
+                    if "member" not in parent_lower and "domain" not in parent_lower:
+                        continue
+
+                    # Add all parent-child relationships
+                    for child_data in children:
+                        if isinstance(child_data, dict):
+                            child_concept = child_data.get("t")
+                            if child_concept:
+                                hierarchy.add_relationship(parent_concept, child_concept)
+
+            # Only return if we found any relationships
+            if hierarchy.children or hierarchy.parents:
+                logger.info(
+                    f"Extracted dimension hierarchy: {len(hierarchy.parents)} members, "
+                    f"{len(hierarchy.children)} parent nodes"
+                )
+                return hierarchy
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Failed to extract dimension hierarchy: {e}")
+            return None

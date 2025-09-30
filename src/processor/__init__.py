@@ -8,7 +8,7 @@ the original presentation structure.
 from .input_handler import InputHandler, FilingSource
 from .arelle_processor import ArelleProcessor
 from .json_extractor import ViewerDataExtractor
-from .data_models import Statement, Period, Row, Cell, ProcessingResult
+from .data_models import Statement, Period, Row, Cell, ProcessingResult, DimensionHierarchy
 from .presentation_models import (
     StatementType,
     PresentationNode,
@@ -34,6 +34,7 @@ __all__ = [
     "Row",
     "Cell",
     "ProcessingResult",
+    "DimensionHierarchy",
     "StatementType",
     "PresentationNode",
     "PresentationStatement",

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from .data_models import Cell, Period, ProcessingResult, Row, Statement
+from .data_models import Cell, Period, ProcessingResult, Row, Statement, DimensionHierarchy
 
 
 logger = logging.getLogger(__name__)
@@ -156,15 +156,96 @@ def _parent_path(row: Row) -> Optional[Tuple[str, ...]]:
     return tuple(_normalise_concept(node.concept) for node in ancestors)
 
 
-def _rows_match(anchor: Row, candidate: Row) -> bool:
-    """Determine whether two rows should be considered equivalent."""
+def _signatures_semantically_compatible(
+    anchor_sig: Optional[Tuple[Tuple[str, str], ...]],
+    candidate_sig: Optional[Tuple[Tuple[str, str], ...]],
+    hierarchy: Optional[DimensionHierarchy],
+) -> bool:
+    """Check if two dimension signatures are semantically compatible.
+
+    Returns True if:
+    - Both are None or empty
+    - They are identical
+    - One is the parent/ancestor of the other in the dimension hierarchy
+    - Multiple children in one signature can roll up to a parent in the other
+
+    Args:
+        anchor_sig: Dimension signature from anchor filing
+        candidate_sig: Dimension signature from candidate filing
+        hierarchy: Dimension hierarchy for semantic lookups
+
+    Returns:
+        True if the signatures are compatible for alignment
+    """
+    if not anchor_sig and not candidate_sig:
+        return True
+
+    if anchor_sig == candidate_sig:
+        return True
+
+    if not hierarchy:
+        return False
+
+    # Both must be present for semantic matching
+    if not anchor_sig or not candidate_sig:
+        return False
+
+    # Must be on the same axes (keys must match)
+    anchor_axes = {axis for axis, _ in anchor_sig}
+    candidate_axes = {axis for axis, _ in candidate_sig}
+    if anchor_axes != candidate_axes:
+        return False
+
+    # Check axis-by-axis if members are semantically related
+    for axis in anchor_axes:
+        anchor_member = next(member for a, member in anchor_sig if a == axis)
+        candidate_member = next(member for a, member in candidate_sig if a == axis)
+
+        if anchor_member == candidate_member:
+            continue  # Exact match on this axis
+
+        # Check if one is ancestor of the other
+        if hierarchy.is_ancestor(anchor_member, candidate_member):
+            logger.debug(
+                f"Dimension semantic match: '{candidate_member}' is child of '{anchor_member}' on axis '{axis}'"
+            )
+            continue
+        if hierarchy.is_ancestor(candidate_member, anchor_member):
+            logger.debug(
+                f"Dimension semantic match: '{anchor_member}' is child of '{candidate_member}' on axis '{axis}'"
+            )
+            continue
+
+        # No semantic relationship found for this axis
+        return False
+
+    return True
+
+
+def _rows_match(
+    anchor: Row,
+    candidate: Row,
+    hierarchy: Optional[DimensionHierarchy] = None,
+) -> bool:
+    """Determine whether two rows should be considered equivalent.
+
+    Args:
+        anchor: Row from the anchor filing
+        candidate: Row from the candidate filing
+        hierarchy: Optional dimension hierarchy for semantic matching
+    """
 
     anchor_signature = _normalise_signature(getattr(anchor, "dimension_signature", None))
     candidate_signature = _normalise_signature(getattr(candidate, "dimension_signature", None))
 
+    # First try strict signature matching
     if anchor_signature is not None or candidate_signature is not None:
         if anchor_signature != candidate_signature:
-            return False
+            # If strict match fails but hierarchy is available, try semantic matching
+            # But only if other attributes align (concept, label, depth, parent path)
+            if not hierarchy:
+                return False
+            # Continue to check other attributes before attempting semantic match
 
     anchor_parent_path = _parent_path(anchor)
     candidate_parent_path = _parent_path(candidate)
@@ -181,6 +262,13 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
     candidate_normalised = _normalise_concept(candidate.concept)
 
     if anchor_concept and candidate_concept and anchor_concept == candidate_concept:
+        # Exact concept match - now check if dimensions are semantically compatible
+        if anchor_signature != candidate_signature:
+            if _signatures_semantically_compatible(
+                anchor_signature, candidate_signature, hierarchy
+            ):
+                return True
+            return False
         return True
 
     if (
@@ -194,6 +282,13 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
         candidate_order = getattr(candidate_node, "order", None)
         if anchor_order is None or candidate_order is None or anchor_order == candidate_order:
             if anchor_label == candidate_label:
+                # Label and structure match - check semantic dimension compatibility
+                if anchor_signature != candidate_signature:
+                    if _signatures_semantically_compatible(
+                        anchor_signature, candidate_signature, hierarchy
+                    ):
+                        return True
+                    return False
                 return True
 
             if anchor_normalised:
@@ -203,6 +298,13 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
                     anchor_label,
                     candidate_label,
                 )
+                # Check semantic dimension compatibility even for fallback matches
+                if anchor_signature != candidate_signature:
+                    if _signatures_semantically_compatible(
+                        anchor_signature, candidate_signature, hierarchy
+                    ):
+                        return True
+                    return False
                 return True
 
     return False
@@ -211,8 +313,15 @@ def _rows_match(anchor: Row, candidate: Row) -> bool:
 def _map_rows(
     anchor_rows: Sequence[Row],
     candidate_rows: Sequence[Row],
+    hierarchy: Optional[DimensionHierarchy] = None,
 ) -> Tuple[List[Optional[Row]], List[Row]]:
-    """Align candidate rows against the anchor skeleton."""
+    """Align candidate rows against the anchor skeleton.
+
+    Args:
+        anchor_rows: Rows from the anchor filing
+        candidate_rows: Rows from the candidate filing
+        hierarchy: Optional dimension hierarchy for semantic matching
+    """
 
     remaining = list(candidate_rows)
     matched: List[Optional[Row]] = []
@@ -220,7 +329,7 @@ def _map_rows(
     for anchor_row in anchor_rows:
         match_index: Optional[int] = None
         for idx, candidate in enumerate(remaining):
-            if _rows_match(anchor_row, candidate):
+            if _rows_match(anchor_row, candidate, hierarchy):
                 match_index = idx
                 break
 
@@ -247,6 +356,42 @@ class FilingSlice:
         return cls(source=source, result=result, filing_date=_safe_parse_date(result.filing_date))
 
 
+def _merge_dimension_hierarchies(
+    slices: Sequence[FilingSlice],
+) -> Optional[DimensionHierarchy]:
+    """Merge dimension hierarchies from all filings.
+
+    Args:
+        slices: Filing slices to merge hierarchies from
+
+    Returns:
+        Combined hierarchy containing all relationships from all filings
+    """
+    merged = DimensionHierarchy()
+    found_any = False
+
+    for slice_item in slices:
+        hierarchy = slice_item.result.dimension_hierarchy
+        if not hierarchy:
+            continue
+
+        found_any = True
+        # Merge all relationships
+        for parent, children in hierarchy.children.items():
+            for child in children:
+                merged.add_relationship(parent, child)
+
+    if not found_any:
+        logger.debug("No dimension hierarchies found across filings")
+        return None
+
+    logger.info(
+        f"Merged dimension hierarchies: {len(merged.parents)} members, "
+        f"{len(merged.children)} parent nodes"
+    )
+    return merged
+
+
 def build_ensemble_result(slices: Iterable[FilingSlice]) -> ProcessingResult:
     """Combine multiple single-filing results into one multi-period workbook."""
 
@@ -262,6 +407,9 @@ def build_ensemble_result(slices: Iterable[FilingSlice]) -> ProcessingResult:
         _canonical_statement_key(statement): statement for statement in anchor_result.statements
     }
 
+    # Merge dimension hierarchies from all filings
+    merged_hierarchy = _merge_dimension_hierarchies(sorted_slices)
+
     combined_warnings: List[str] = []
     for individual in sorted_slices:
         combined_warnings.extend(individual.result.warnings or [])
@@ -270,7 +418,7 @@ def build_ensemble_result(slices: Iterable[FilingSlice]) -> ProcessingResult:
 
     for statement_key, anchor_statement in anchor_statement_keys.items():
         aggregated_statement, statement_warnings = _aggregate_statement(
-            statement_key, anchor_statement, sorted_slices
+            statement_key, anchor_statement, sorted_slices, merged_hierarchy
         )
         ensemble_statements.append(aggregated_statement)
         combined_warnings.extend(statement_warnings)
@@ -307,8 +455,16 @@ def _aggregate_statement(
     statement_key: str,
     anchor_statement: Statement,
     slices: Sequence[FilingSlice],
+    merged_hierarchy: Optional[DimensionHierarchy] = None,
 ) -> Tuple[Statement, List[str]]:
-    """Aggregate a single statement across all filings."""
+    """Aggregate a single statement across all filings.
+
+    Args:
+        statement_key: Canonical key for the statement
+        anchor_statement: Statement from the anchor filing
+        slices: All filing slices to aggregate
+        merged_hierarchy: Merged dimension hierarchy across all filings
+    """
 
     aggregated_rows: List[Row] = [_clone_row_structure(row) for row in anchor_statement.rows]
     extra_rows: "OrderedDict[Tuple, Row]" = OrderedDict()
@@ -351,7 +507,7 @@ def _aggregate_statement(
 
         if statement and statement.periods:
             matched_rows, additional_rows = _map_rows(
-                anchor_statement.rows, statement.rows
+                anchor_statement.rows, statement.rows, merged_hierarchy
             )
         else:
             matched_rows = [None] * len(anchor_statement.rows)

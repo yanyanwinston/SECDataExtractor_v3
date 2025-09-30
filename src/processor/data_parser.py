@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Set, Tuple
 
-from .data_models import Statement, Period, Row, ProcessingResult
+from .data_models import Statement, Period, Row, ProcessingResult, DimensionHierarchy
 from .value_formatter import ValueFormatter
 from .presentation_parser import PresentationParser
 from .fact_matcher import FactMatcher
@@ -119,6 +119,9 @@ class DataParser:
 
             statements = self._parse_with_presentation(viewer_data, form_type)
 
+            # Extract dimension hierarchy if available
+            dimension_hierarchy = viewer_data.get("dimension_hierarchy")
+
             if not statements:
                 error_message = (
                     "No presentation statements with fact data were produced"
@@ -131,6 +134,7 @@ class DataParser:
                     form_type=form_type,
                     success=False,
                     error=error_message,
+                    dimension_hierarchy=dimension_hierarchy,
                 )
 
             return ProcessingResult(
@@ -139,6 +143,7 @@ class DataParser:
                 filing_date=filing_date,
                 form_type=form_type,
                 success=True,
+                dimension_hierarchy=dimension_hierarchy,
             )
 
         except Exception as e:
