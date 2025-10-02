@@ -54,6 +54,7 @@ Run at least one TSLA end-to-end smoke that covers bronze -> silver -> gold and 
 ## Documentation
 - Canonical docs live in `docs/`: `architecture.md`, `user-guide.md`, `cli-reference.md`, `developer-guide.md`.
 - Roadmap specs for Steps 2–5: `docs/xbrl_pipeline_specs_steps_2_5.md`. Keep CCD/override references in sync.
+- Step-by-step plans live under `docs/plans/` (see @docs/plans/folder).
 - Historical specs: `docs/11-refactor-spec-v3.1.md`, `SPEC.md`, `CLAUDE.md`.
 - Update README and docs whenever behaviour changes; capture validation commands in PR summaries.
 
