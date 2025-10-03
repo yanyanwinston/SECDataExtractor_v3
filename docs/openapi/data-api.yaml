@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: SECDataExtractor Data API
+  version: 0.1.0
+  description: >-
+    Local-first data retrieval API for SECDataExtractor. The service surfaces cached
+    SEC filings from disk and automatically downloads missing filings from EDGAR when
+    a request cannot be fulfilled locally.
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+paths:
+  /data/{ticker}/filings:
+    get:
+      tags:
+        - data
+      summary: List filings for a ticker within a date range
+      operationId: listFilingsByDateRange
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Ticker symbol identifying the company to query.
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          required: false
+          description: >-
+            Inclusive lower bound in ISO date format (YYYY-MM-DD). When omitted the
+            search begins with the oldest cached filing.
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          description: >-
+            Inclusive upper bound in ISO date format (YYYY-MM-DD). Defaults to the
+            current calendar date when not provided.
+          schema:
+            type: string
+            format: date
+        - name: documentType
+          in: query
+          required: false
+          description: >-
+            Restrict results to a specific form type. Supported values: 10-K or 10-Q.
+            When omitted, both form types are returned.
+          schema:
+            type: string
+            enum:
+              - 10-K
+              - 10-Q
+      responses:
+        '200':
+          description: Matching filings were returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DateRangeResponse'
+        '400':
+          description: Invalid request parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /data/{ticker}/filings/latest:
+    get:
+      tags:
+        - data
+      summary: Fetch the most recent filings for a ticker
+      operationId: listLatestFilings
+      parameters:
+        - name: ticker
+          in: path
+          required: true
+          description: Ticker symbol identifying the company to query.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: >-
+            Number of filings to return. Defaults to 5 and is capped at 40 to prevent
+            excessive downstream downloads.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 40
+            default: 4
+        - name: documentType
+          in: query
+          required: false
+          description: >-
+            Restrict results to a specific form type. Supported values: 10-K or 10-Q.
+            When omitted, both form types are returned.
+          schema:
+            type: string
+            enum:
+              - 10-K
+              - 10-Q
+      responses:
+        '200':
+          description: Latest filings were returned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LatestResponse'
+        '400':
+          description: Invalid request parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    DateRangeResponse:
+      type: object
+      required:
+        - ticker
+        - query
+        - count
+        - filings
+      properties:
+        ticker:
+          type: string
+          description: Uppercase ticker symbol used for the lookup.
+        query:
+          $ref: '#/components/schemas/DateRangeQuery'
+        count:
+          type: integer
+          description: Total number of filings included in the response.
+          minimum: 0
+        filings:
+          type: array
+          description: Collection of filings matching the request parameters.
+          items:
+            $ref: '#/components/schemas/Filing'
+    LatestResponse:
+      type: object
+      required:
+        - ticker
+        - query
+        - count
+        - filings
+      properties:
+        ticker:
+          type: string
+          description: Uppercase ticker symbol used for the lookup.
+        query:
+          $ref: '#/components/schemas/LatestQuery'
+        count:
+          type: integer
+          description: Total number of filings included in the response.
+          minimum: 0
+        filings:
+          type: array
+          description: Collection of filings ordered by most recent filing date first.
+          items:
+            $ref: '#/components/schemas/Filing'
+    DateRangeQuery:
+      type: object
+      required:
+        - endDate
+        - documentType
+      properties:
+        startDate:
+          type: string
+          format: date
+          nullable: true
+          description: Inclusive lower bound; null when no lower bound was provided.
+        endDate:
+          type: string
+          format: date
+          description: Inclusive upper bound applied to the query.
+        documentType:
+          type: string
+          enum:
+            - ALL
+            - 10-K
+            - 10-Q
+          description: Form type filter applied by the service (ALL, 10-K, or 10-Q).
+    LatestQuery:
+      type: object
+      required:
+        - limit
+        - documentType
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 40
+          description: Number of filings returned in the payload.
+        documentType:
+          type: string
+          enum:
+            - ALL
+            - 10-K
+            - 10-Q
+          description: Form type filter applied by the service (ALL, 10-K, or 10-Q).
+    Filing:
+      type: object
+      required:
+        - ticker
+        - accessionNumber
+        - formType
+        - filingDate
+        - companyName
+        - edgarUrl
+        - source
+        - availableLocally
+      properties:
+        ticker:
+          type: string
+          description: Ticker symbol tied to the filing.
+        accessionNumber:
+          type: string
+          description: Accession number for the filing.
+        formType:
+          type: string
+          description: SEC form type (10-K or 10-Q).
+        filingDate:
+          type: string
+          format: date-time
+          description: Datetime when the filing was accepted by EDGAR.
+        reportDate:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fiscal period end associated with the filing when available.
+        companyName:
+          type: string
+          nullable: true
+          description: Company name supplied by EDGAR metadata.
+        primaryDocument:
+          type: string
+          nullable: true
+          description: Primary filing document name inside the download bundle.
+        edgarUrl:
+          type: string
+          nullable: true
+          format: uri
+          description: Base EDGAR URL for the filing.
+        localPath:
+          type: string
+          nullable: true
+          description: Absolute path to the cached filing directory when present.
+        metadataPath:
+          type: string
+          nullable: true
+          description: Absolute path to the `metadata.json` file when present locally.
+        source:
+          type: string
+          enum:
+            - local
+            - downloaded
+            - remote
+          description: Origin of the data included in the response.
+        availableLocally:
+          type: boolean
+          description: Indicates whether the filing artifacts exist on disk.
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Human readable explanation of the error.

@@ -18,6 +18,7 @@ setup, project layout, validation steps, and the release checklist.
    change in the PR description.
 
 ## Repository layout
+- `src/api/` – FastAPI data endpoints and service layer for `/data`
 - `src/sec_downloader/` – EDGAR search, models, download orchestration
 - `src/processor/` – presentation-first parsing pipeline and Excel generator
 - `download_filings.py`, `render_viewer_to_xlsx.py`, `download_and_render.py` – CLI
@@ -46,6 +47,21 @@ For pipeline changes, include at least one live filing run in the PR description
 python download_filings.py --ticker TSLA --form 10-K --count 1
 python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out output/tsla.xlsx
 ```
+
+## Data API prototype
+- The FastAPI application in `src/api/app.py` exposes `/data/{ticker}/filings` and
+  `/data/{ticker}/filings/latest` for retrieving cached SEC filings.
+- Requests surface local filings first; cache misses trigger on-demand downloads
+  through the existing downloader stack.
+- Consult `docs/openapi/data-api.yaml` for the OpenAPI 3.0 contract and sample
+  payloads.
+- Run the service locally with `uvicorn api.app:app --reload` (requires the
+  `fastapi` dependency from `requirements.txt`).
+- Import `docs/postman/data-api.postman_collection.json` into Postman for quick
+  requests against a running instance.
+- The service keeps per-ticker filing metadata in memory for ~5 minutes to
+  accelerate repeat queries; adjust `cache_ttl` when constructing
+  `DataRetrievalService` for different caching horizons.
 
 ## Working with Arelle
 - `ArelleProcessor.check_arelle_available()` verifies installation; the renderer will
