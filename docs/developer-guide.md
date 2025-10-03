@@ -56,12 +56,18 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 - Consult `docs/openapi/data-api.yaml` for the OpenAPI 3.0 contract and sample
   payloads.
 - Run the service locally with `uvicorn api.app:app --reload` (requires the
-  `fastapi` dependency from `requirements.txt`).
+  `fastapi` and `uvicorn` dependency from `requirements.txt`).
 - Import `docs/postman/data-api.postman_collection.json` into Postman for quick
   requests against a running instance.
-- The service keeps per-ticker filing metadata in memory for ~5 minutes to
-  accelerate repeat queries; adjust `cache_ttl` when constructing
-  `DataRetrievalService` for different caching horizons.
+- The filing and statement services keep in-memory caches (~5 minute default);
+  adjust `cache_ttl` when constructing `FilingRetrievalService` or
+  `StatementRetrievalService` for different horizons.
+- Concept labels merge MetaLinks metadata with the local label linkbase. When MetaLinks
+  omits issuer-specific captions, the extractor reads `*_lab.xml` to repopulate terse and
+  total labels before parsing presentation trees.
+- Fact matching collapses single-dimension concept facts back to the base line item when the
+  dimension fingerprint is the same for every context. This prevents generic member names from
+  replacing concept captions in legacy filings (e.g., TSLA 2022 automotive revenues).
 
 ## Working with Arelle
 - `ArelleProcessor.check_arelle_available()` verifies installation; the renderer will

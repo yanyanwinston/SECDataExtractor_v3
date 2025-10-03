@@ -34,6 +34,16 @@
       "key": "documentType",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "statementType",
+      "value": "Income Statement",
+      "type": "string"
+    },
+    {
+      "key": "statementLimit",
+      "value": "4",
+      "type": "string"
     }
   ],
   "item": [
@@ -96,6 +106,69 @@
               "key": "documentType",
               "value": "{{documentType}}",
               "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List statements by date range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/statements?statementType={{statementType}}&startDate={{startDate}}&endDate={{endDate}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "statements"
+          ],
+          "query": [
+            {
+              "key": "statementType",
+              "value": "{{statementType}}"
+            },
+            {
+              "key": "startDate",
+              "value": "{{startDate}}"
+            },
+            {
+              "key": "endDate",
+              "value": "{{endDate}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Latest statements",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/statements/latest?statementType={{statementType}}&limit={{statementLimit}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "statements",
+            "latest"
+          ],
+          "query": [
+            {
+              "key": "statementType",
+              "value": "{{statementType}}"
+            },
+            {
+              "key": "limit",
+              "value": "{{statementLimit}}"
             }
           ]
         }
