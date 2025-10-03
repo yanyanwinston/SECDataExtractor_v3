@@ -13,17 +13,17 @@ class FilingRecord:
     """Represents a filing exposed by the data retrieval API."""
 
     ticker: str
-    cik: Optional[str] = None
     accession_number: str
     form_type: str
     filing_date: datetime
-    report_date: Optional[datetime]
-    company_name: Optional[str]
-    primary_document: Optional[str]
-    edgar_url: Optional[str]
-    local_path: Optional[Path]
-    metadata_path: Optional[Path]
     source: Literal["local", "downloaded", "remote"]
+    cik: Optional[str] = None
+    report_date: Optional[datetime] = None
+    company_name: Optional[str] = None
+    primary_document: Optional[str] = None
+    edgar_url: Optional[str] = None
+    local_path: Optional[Path] = None
+    metadata_path: Optional[Path] = None
 
     def available_locally(self) -> bool:
         """Return True when the filing artifacts are present on disk."""
@@ -35,7 +35,6 @@ class FilingRecord:
 
         return {
             "ticker": self.ticker,
-            "cik": self.cik,
             "accessionNumber": self.accession_number,
             "formType": self.form_type,
             "filingDate": self.filing_date.isoformat(),
@@ -46,6 +45,7 @@ class FilingRecord:
             "localPath": str(self.local_path) if self.local_path else None,
             "metadataPath": str(self.metadata_path) if self.metadata_path else None,
             "source": self.source,
+            "cik": self.cik,
             "availableLocally": self.available_locally(),
         }
 
@@ -84,11 +84,11 @@ class StatementRecord:
     ticker: str
     statement_type: str
     filing_date: datetime
-    report_date: Optional[datetime]
     form_type: str
     accession_number: str
     workbook_path: Path
     sheet: StatementSheet
+    report_date: Optional[datetime] = None
 
     def to_dict(self) -> Dict[str, object]:
         return {

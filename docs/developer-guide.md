@@ -62,6 +62,13 @@ python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out 
 - The filing and statement services keep in-memory caches (~5 minute default);
   adjust `cache_ttl` when constructing `FilingRetrievalService` or
   `StatementRetrievalService` for different horizons.
+- Container workflow:
+  ```bash
+  docker build -t secdataextractor-api .
+  docker run --rm -p 8000:8000 secdataextractor-api
+  # or, with live volumes
+  docker compose up --build
+  ```
 - Concept labels merge MetaLinks metadata with the local label linkbase. When MetaLinks
   omits issuer-specific captions, the extractor reads `*_lab.xml` to repopulate terse and
   total labels before parsing presentation trees.
