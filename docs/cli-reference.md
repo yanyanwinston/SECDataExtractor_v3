@@ -1,9 +1,9 @@
 # CLI Reference
 
-This reference covers the three supported entry points: `download_filings.py`,
-`render_viewer_to_xlsx.py`, and `download_and_render.py`. Each script supports
-`--help` for inline documentation; the tables below highlight the arguments that
-impact behaviour most.
+This reference covers the core entry points: `download_filings.py`,
+`render_viewer_to_xlsx.py`, `export_tables.py`, and `download_and_render.py`.
+Each script supports `--help` for inline documentation; the tables below highlight
+the arguments that impact behaviour most.
 
 ## download_filings.py
 Download 10-K/10-Q filings from EDGAR.
@@ -56,6 +56,24 @@ python render_viewer_to_xlsx.py --filing <PATH|URL|ZIP> --out output.xlsx \
 - `--one-period` keeps the latest period per statement; `--periods` accepts a
   comma-separated list of period labels or years and takes precedence when provided.
 - `--temp-dir`, `--keep-temp`, and `--timeout` let you manage Arelle behaviour.
+
+## export_tables.py
+Persist bronze (`viewer.json`, `fact_long`) and silver (`statement_lines`, `statement_facts`) tables for a single filing.
+
+### Usage
+```bash
+python export_tables.py --filing <PATH|URL|ZIP> --out data/ \
+  [--include-disclosures] [--collapse-dimensions] [--label-style {terse,standard}] \
+  [--temp-dir tmp] [--keep-temp] [--timeout 300] [--verbose]
+```
+
+### Notable options
+- `--filing` accepts the same sources as the Excel CLI (URL, local HTML, or ZIP). Arelle is invoked to generate the viewer payload before export.
+- `--out` controls the root data directory. Bronze artifacts land in `data/bronze/<CIK>/<accession>/`, silver in `data/silver/<CIK>/<accession>/`.
+- `--include-disclosures` widens the role filter beyond primary statements; `--collapse-dimensions` rolls up dimensional rows to consolidated values.
+- `--label-style` passes straight to `DataParser` for terse vs. standard concept labels.
+- `--temp-dir`, `--keep-temp`, `--timeout`, and `--verbose` mirror the Excel CLI for debugging Arelle runs.
+- The exporter automatically ingests nearby `metadata.json` (written by the downloader) to populate CIK/accession in bronze/silver paths.
 
 ## download_and_render.py
 End-to-end downloader + renderer for portfolios.

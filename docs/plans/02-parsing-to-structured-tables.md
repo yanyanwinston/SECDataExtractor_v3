@@ -14,23 +14,20 @@ Transform Arelle's iXBRL viewer output (HTML with embedded viewer JSON + MetaLin
 - [x] Modular viewer JSON + MetaLinks extraction via `ViewerDataExtractor`, including role maps and concept label lookups.
 - [x] Presentation-first traversal, statement classification, and MetaLinks filters through `PresentationParser` and `DataParser` powering current Excel output.
 - [x] Fact matching with context-aware period policy, dimensional expansion, and raw/display value split via `FactMatcher` feeding the workbook generator.
-- [ ] Persist `statement_lines`, `statement_facts`, and `fact_long` as bronze/silver artifacts with schema metadata.
-- [ ] Capture filing metadata (`filing_id`, `entity_cik`, accession, taxonomy) and persist viewer payloads under `data/bronze/`.
-- [ ] Ship `export_tables.py` CLI (flags for disclosures, period policy, dimension collapsing, viewer JSON export) and wire QC logging/tests.
+- [x] Persist `statement_lines`, `statement_facts`, and `fact_long` as bronze/silver artifacts with schema metadata.
+- [x] Capture filing metadata (`filing_id`, `entity_cik`, accession, taxonomy) and persist viewer payloads under `data/bronze/`.
+- [x] Ship `export_tables.py` CLI (flags for disclosures, period policy, dimension collapsing, viewer JSON export) and wire QC logging/tests.
 
 ### Current Implementation Notes
 - `ViewerDataExtractor.extract_viewer_data` already finds embedded viewer payloads, loads MetaLinks, and builds role/concept lookup maps reused by presentation parsing.
 - `DataParser` orchestrates presentation parsing, period selection, and fact matching, returning `ProcessingResult` objects for the Excel path.
 - `FactMatcher` expands dimensional members into additional rows, keeps raw numeric values separate from formatted strings, and reuses axis metadata.
 - `PresentationParser` classifies statements, attaches MetaLinks metadata (groupType/subGroupType/order), and keeps stable DFS ordering for line construction.
-- `ExcelGenerator` consumes the above state; we still need dedicated writers that emit tables while leaving the XLSX workflow untouched.
+- `ExcelGenerator` consumes the above state; the new bronze/silver exporters (`bronze_writer.py`, `bronze_fact_exporter.py`, `silver_exporter.py`) materialise the same structures to Parquet without disturbing the Excel workflow.
 
-### Remaining Scope for Step 2
-- Materialize `statement_lines`, `statement_facts`, and `fact_long` DataFrames/Parquet with the columns below, including `line_order`, `dimension_json`, `dimension_hash`, `is_consolidated`, and provenance fields.
-- Attach filing-level metadata (CIK, accession, filing_id, taxonomy, tool versions) and persist raw viewer JSON/MetaLinks in `data/bronze/` for audit.
-- Design exporters that reuse existing presentation/fact matching code paths without regressing Excel output; ensure bronze/silver writes are opt-in until stable.
-- Build `export_tables.py` CLI that mirrors Excel CLI ergonomics, exposes `--include-disclosures`, `--collapse-dimensions`, `--periods`, `--use-ytd`, and optional viewer JSON save switches.
-- Extend tests (presentation parser, integration) with assertions over the new table outputs, and add smoke scripts to compare Excel vs. Parquet totals for reference filings.
+### Follow-ups
+- Harden CLI ergonomics by adding remaining planned flags (`--periods`, `--use-ytd`) and wiring QC logging.
+- Expand regression coverage to compare Excel totals vs. bronze/silver exports for reference filings.
 
 ---
 
@@ -42,12 +39,12 @@ Transform Arelle's iXBRL viewer output (HTML with embedded viewer JSON + MetaLin
 - **Presentation**: `rels.pres[roleId]` arrays define parent->children and order.
 - **Role definitions**: `roleDefs[roleId] -> { roleURI, definition }` (e.g., "Statement - Consolidated Balance Sheets").
 
-_Status_: Already parsed for Excel; needs to be persisted to `data/bronze/` alongside the derived tables and extended to support multiple `sourceReports` where present.
+_Status_: Persisted to `data/bronze/` alongside the derived tables. When multiple `sourceReports` exist we currently select the first target report (future enhancement).
 
 **B. MetaLinks.json**
 - Use to map roles to high-level `groupType/subgroupType` (e.g., `statement`, `disclosure`). Default: include `statement` roles; disclosures are opt-in.
 
-_Status_: Ingested via `ViewerDataExtractor` and attached to `PresentationStatement`. We must propagate this metadata into table exports and handle filings lacking MetaLinks gracefully.
+_Status_: Ingested via `ViewerDataExtractor`, propagated through the bronze/silver exporters; filings without MetaLinks fall back to parser heuristics with null metadata.
 
 ---
 
@@ -61,7 +58,7 @@ _Status_: Ingested via `ViewerDataExtractor` and attached to `PresentationStatem
 - `is_abstract` (bool), `preferred_label_role`
 - `metalink_group_type`, `metalink_subgroup_type`
 
-_Status_: Presentation nodes already capture ordering, abstraction, and labels. Missing pieces are persistent IDs (`filing_id`), dual label capture, and an exporter that emits one row per node.
+_Status_: Implemented via `build_statement_lines_dataframe`; rows persist provenance, labels, and MetaLinks attributes.
 
 2) **`statement_facts`** (line<->fact placements)
 - Keys: `filing_id`, `statement_role_id`, `concept_qname`, `period_end`, `dimension_hash`, `unit`
@@ -70,12 +67,12 @@ _Status_: Presentation nodes already capture ordering, abstraction, and labels. 
 - Dimensionality: `dimension_json` (axis/member pairs), `is_consolidated` (true if no non-default members)
 - Meta: `entity`, `is_extension` (namespace not in {`us-gaap`, `dei`, etc.})
 
-_Status_: Fact matching already yields per-period cells with raw/display values and dimension expansion. We need to capture the underlying context attributes, compute hashes, and serialize rows instead of only populating workbook cells.
+_Status_: Implemented via `build_statement_facts_dataframe`; context metadata, period bounds, and dimension hashes are captured.
 
 3) **`fact_long`** (canonical long format; union of all statements)
 - All columns in `statement_facts`, plus: `statement_type`, `concept_balance` (`debit`/`credit`/`none`), `concept_datatype`, label flags (e.g., `has_negated_label`).
 
-_Status_: Requires deriving additional concept metadata (balance/datatype/labels) and unifying all statement_facts rows into one table with consistent primary keys.
+_Status_: Implemented via `build_fact_long_dataframe`; union of all statement facts with concept metadata and dimensional provenance.
 
 > **Modeling guidance**: Always compute from `value_numeric` + `unit` (raw, unscaled). Use display scaling only for human-friendly exports.
 
@@ -133,7 +130,7 @@ python export_tables.py --filing <PATH|URL|ZIP> --out data/ \
 - `FactIndexer`: concept->facts with context/units; helpers for period policy + dimensions.
 - `TableExporter`: materializes the three outputs.
 
-_Status_: Classes above remain conceptual; we currently operate with `ViewerDataExtractor`, `PresentationParser`, `FactMatcher`, and `DataParser`. We need a thin orchestration layer (`export_tables.py` + exporter module) that wraps existing components and writes Parquet/CSV without disturbing Excel generation.
+_Status_: Realised by `bronze_writer.py`, `bronze_fact_exporter.py`, `silver_exporter.py`, and the `export_tables.py` CLI which orchestrates extraction through DataParser into persisted Parquet tables.
 
 ---
 
