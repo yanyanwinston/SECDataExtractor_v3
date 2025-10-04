@@ -135,3 +135,4 @@ viewer.json
 # Logs
 *.log
 logs/
+data/

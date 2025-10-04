@@ -2,7 +2,7 @@
 Data models for SEC filing processing.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -24,6 +24,7 @@ class Cell:
     unit: Optional[str]
     decimals: Optional[int]
     period: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

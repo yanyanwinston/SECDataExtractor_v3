@@ -141,6 +141,8 @@ class StatementRow:
 
     node: PresentationNode  # Presentation information
     cells: Dict[str, Cell] = field(default_factory=dict)  # period_id -> Cell
+    dimensions: Dict[str, str] = field(default_factory=dict)
+    dimension_hash: Optional[str] = None
 
     # Properties for compatibility with existing Excel generator
     @property

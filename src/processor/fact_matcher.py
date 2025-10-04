@@ -7,6 +7,9 @@ nodes, creating complete statement tables ready for Excel generation.
 
 import logging
 import math
+import hashlib
+import json
+from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .presentation_models import (
@@ -122,7 +125,14 @@ class FactMatcher:
         if not self.expand_dimensions:
             clone = self._clone_node(node, depth=display_depth)
             cells = self._build_cells_without_dimensions(concept, periods, facts)
-            return [StatementRow(node=clone, cells=cells)]
+            return [
+                StatementRow(
+                    node=clone,
+                    cells=cells,
+                    dimensions={},
+                    dimension_hash=None,
+                )
+            ]
 
         fact_groups = self._group_facts_by_dimensions(
             concept,
@@ -133,7 +143,14 @@ class FactMatcher:
 
         if not fact_groups:
             clone = self._clone_node(node, depth=display_depth)
-            return [StatementRow(node=clone, cells=self._build_empty_cells(periods))]
+            return [
+                StatementRow(
+                    node=clone,
+                    cells=self._build_empty_cells(periods),
+                    dimensions={},
+                    dimension_hash=None,
+                )
+            ]
 
         # Sort: base row (no dimensions) first, then remaining dimension combinations.
         sorted_keys = sorted(
@@ -170,17 +187,27 @@ class FactMatcher:
             )
 
             cells = self._build_cells_for_group(group["contexts"], periods)
+            dimension_hash = self._compute_dimension_hash(dims_map)
 
             # Skip rows where every cell is blank.
             if all(cell.raw_value is None for cell in cells.values()):
                 continue
 
-            generated_rows.append(StatementRow(node=clone, cells=cells))
+            generated_rows.append(
+                StatementRow(
+                    node=clone,
+                    cells=cells,
+                    dimensions=dims_map,
+                    dimension_hash=dimension_hash,
+                )
+            )
 
         return generated_rows or [
             StatementRow(
                 node=self._clone_node(node, depth=display_depth),
                 cells=self._build_empty_cells(periods),
+                dimensions={},
+                dimension_hash=None,
             )
         ]
 
@@ -284,6 +311,8 @@ class FactMatcher:
             context = self._select_context_for_period(context_list, period)
             if context:
                 cell = self._create_cell_from_fact(context, period)
+                cell.metadata["context"] = deepcopy(context)
+                cell.metadata["dimensions"] = deepcopy(context.get("dims", {}))
             else:
                 cell = Cell(
                     value="—",
@@ -292,6 +321,8 @@ class FactMatcher:
                     decimals=None,
                     period=period.label,
                 )
+                cell.metadata["context"] = None
+                cell.metadata["dimensions"] = {}
             cells[period.label] = cell
 
         return cells
@@ -310,6 +341,8 @@ class FactMatcher:
             fact = self._find_fact_for_concept_and_period(concept, period, facts)
             if fact:
                 cell = self._create_cell_from_fact(fact, period)
+                cell.metadata["context"] = deepcopy(fact)
+                cell.metadata["dimensions"] = deepcopy(fact.get("dims", {}))
             else:
                 cell = Cell(
                     value="—",
@@ -318,6 +351,8 @@ class FactMatcher:
                     decimals=None,
                     period=period.label,
                 )
+                cell.metadata["context"] = None
+                cell.metadata["dimensions"] = {}
             cells[period.label] = cell
 
         return cells
@@ -344,9 +379,17 @@ class FactMatcher:
                 unit=None,
                 decimals=None,
                 period=period.label,
+                metadata={"context": None, "dimensions": {}},
             )
             for period in periods
         }
+
+    @staticmethod
+    def _compute_dimension_hash(dimensions: Dict[str, str]) -> Optional[str]:
+        if not dimensions:
+            return None
+        serialized = json.dumps(dimensions, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha1(serialized.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _clone_node(
