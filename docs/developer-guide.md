@@ -18,6 +18,7 @@ setup, project layout, validation steps, and the release checklist.
    change in the PR description.
 
 ## Repository layout
+- `src/api/` – FastAPI data endpoints and service layer for `/data`
 - `src/sec_downloader/` – EDGAR search, models, download orchestration
 - `src/processor/` – presentation-first parsing pipeline and Excel generator
 - `download_filings.py`, `render_viewer_to_xlsx.py`, `download_and_render.py` – CLI
@@ -46,6 +47,34 @@ For pipeline changes, include at least one live filing run in the PR description
 python download_filings.py --ticker TSLA --form 10-K --count 1
 python render_viewer_to_xlsx.py --filing downloads/TSLA/10-K_*/tsla-*.htm --out output/tsla.xlsx
 ```
+
+## Data API prototype
+- The FastAPI application in `src/api/app.py` exposes `/data/{ticker}/filings` and
+  `/data/{ticker}/filings/latest` for retrieving cached SEC filings.
+- Requests surface local filings first; cache misses trigger on-demand downloads
+  through the existing downloader stack.
+- Consult `docs/openapi/data-api.yaml` for the OpenAPI 3.0 contract and sample
+  payloads.
+- Run the service locally with `uvicorn api.app:app --reload` (requires the
+  `fastapi` and `uvicorn` dependency from `requirements.txt`).
+- Import `docs/postman/data-api.postman_collection.json` into Postman for quick
+  requests against a running instance.
+- The filing and statement services keep in-memory caches (~5 minute default);
+  adjust `cache_ttl` when constructing `FilingRetrievalService` or
+  `StatementRetrievalService` for different horizons.
+- Container workflow:
+  ```bash
+  docker build -t secdataextractor-api .
+  docker run --rm -p 8000:8000 secdataextractor-api
+  # or, with live volumes
+  docker compose up --build
+  ```
+- Concept labels merge MetaLinks metadata with the local label linkbase. When MetaLinks
+  omits issuer-specific captions, the extractor reads `*_lab.xml` to repopulate terse and
+  total labels before parsing presentation trees.
+- Fact matching collapses single-dimension concept facts back to the base line item when the
+  dimension fingerprint is the same for every context. This prevents generic member names from
+  replacing concept captions in legacy filings (e.g., TSLA 2022 automotive revenues).
 
 ## Working with Arelle
 - `ArelleProcessor.check_arelle_available()` verifies installation; the renderer will

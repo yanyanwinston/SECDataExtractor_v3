@@ -1,0 +1,179 @@
+{
+  "info": {
+    "name": "SECDataExtractor Data API",
+    "description": "Requests targeting the prototype /data endpoints exposed by FastAPI.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": {
+      "major": 0,
+      "minor": 1,
+      "patch": 0
+    }
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "ticker",
+      "value": "TSLA",
+      "type": "string"
+    },
+    {
+      "key": "startDate",
+      "value": "2024-01-01",
+      "type": "string"
+    },
+    {
+      "key": "endDate",
+      "value": "2024-12-31",
+      "type": "string"
+    },
+    {
+      "key": "documentType",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "statementType",
+      "value": "Income Statement",
+      "type": "string"
+    },
+    {
+      "key": "statementLimit",
+      "value": "4",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "List filings by date range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/filings?startDate={{startDate}}&endDate={{endDate}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "filings"
+          ],
+          "query": [
+            {
+              "key": "startDate",
+              "value": "{{startDate}}"
+            },
+            {
+              "key": "endDate",
+              "value": "{{endDate}}"
+            },
+            {
+              "key": "documentType",
+              "value": "{{documentType}}",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Latest filings",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/filings/latest?limit=4",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "filings",
+            "latest"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "4"
+            },
+            {
+              "key": "documentType",
+              "value": "{{documentType}}",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List statements by date range",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/statements?statementType={{statementType}}&startDate={{startDate}}&endDate={{endDate}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "statements"
+          ],
+          "query": [
+            {
+              "key": "statementType",
+              "value": "{{statementType}}"
+            },
+            {
+              "key": "startDate",
+              "value": "{{startDate}}"
+            },
+            {
+              "key": "endDate",
+              "value": "{{endDate}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Latest statements",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/data/{{ticker}}/statements/latest?statementType={{statementType}}&limit={{statementLimit}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "data",
+            "{{ticker}}",
+            "statements",
+            "latest"
+          ],
+          "query": [
+            {
+              "key": "statementType",
+              "value": "{{statementType}}"
+            },
+            {
+              "key": "limit",
+              "value": "{{statementLimit}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

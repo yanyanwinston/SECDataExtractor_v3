@@ -18,6 +18,10 @@ aiofiles>=23.0.0          # Async file operations
 # Data handling
 pandas>=2.0.0             # Data manipulation (optional, for advanced processing)
 
+# API
+fastapi>=0.110.0          # REST API framework powering the data endpoints
+uvicorn[standard]>=0.27.0 # ASGI server for running the FastAPI service
+
 # Development and testing (optional)
 pytest>=7.4.0             # Testing framework
 pytest-asyncio>=0.21.0    # Async testing support
